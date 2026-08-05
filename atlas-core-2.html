@@ -1,0 +1,359 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Atlas">
+<meta name="theme-color" content="#020408">
+<title>Atlas Core</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0618}
+canvas{display:block;position:fixed;top:0;left:0;width:100%;height:100%}
+#title{position:fixed;top:24px;left:50%;transform:translateX(-50%);font:300 36px/1 'Rajdhani','Share Tech Mono','Courier New',monospace;letter-spacing:.65em;z-index:10;color:rgba(140,120,255,.35);text-shadow:0 0 30px rgba(140,80,255,.2);text-align:center}
+#sub{position:fixed;top:64px;left:50%;transform:translateX(-50%);font:9px/1 'Share Tech Mono',monospace;letter-spacing:.25em;color:rgba(140,120,255,.12);z-index:10}
+#stLbl{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);font:600 11px/1 'Rajdhani','Share Tech Mono',monospace;letter-spacing:.35em;z-index:10;color:rgba(140,120,255,.25);transition:color 1s}
+#link{position:fixed;top:64px;right:20px;font:9px/1 'Share Tech Mono','Courier New',monospace;z-index:10;color:rgba(140,120,255,.1);transition:color .5s}
+.ctrl{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:10;pointer-events:auto;opacity:.25;transition:opacity .3s}
+.ctrl:hover{opacity:.85}
+.cb{background:none;border:1px solid rgba(140,100,255,.08);color:rgba(140,100,255,.3);font:9px/1 'Share Tech Mono','Courier New',monospace;padding:6px 12px;cursor:pointer;letter-spacing:.12em;text-transform:uppercase;transition:.2s}
+.cb:hover{border-color:rgba(140,100,255,.3);color:rgba(140,100,255,.7)}
+.cb.on{border-color:rgba(140,100,255,.6);color:rgba(180,140,255,.9);box-shadow:0 0 10px rgba(140,80,255,.2)}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div id="title" style="cursor:pointer;pointer-events:auto" onclick="var c=document.getElementById('sbCfg');c.style.display=c.style.display==='none'?'block':'none';document.getElementById('sbUrl').value=localStorage.getItem('atlas_sb_url')||'';document.getElementById('sbKey').value=localStorage.getItem('atlas_sb_key')||''">ATLAS</div>
+<div id="sub">NEURAL CORE v2.0</div>
+<div id="stLbl">STANDBY</div>
+<div id="link">FORGE: --</div>
+<div id="sbCfg" style="position:fixed;bottom:60px;left:50%;transform:translateX(-50%);display:none;z-index:20;pointer-events:auto;background:rgba(0,0,0,.9);border:1px solid rgba(0,180,255,.15);padding:14px;width:320px;font:10px/1.6 'Share Tech Mono',monospace;color:rgba(0,180,255,.5)">
+  <div style="margin-bottom:8px;color:rgba(0,180,255,.35)">CROSS-DEVICE LINK (Supabase)</div>
+  <input id="sbUrl" placeholder="Supabase project URL" style="background:rgba(0,180,255,.04);border:1px solid rgba(0,180,255,.1);color:#D0E8F0;font:10px 'Share Tech Mono',monospace;padding:6px;width:100%;margin-bottom:5px;outline:none">
+  <input id="sbKey" placeholder="Supabase anon key" style="background:rgba(0,180,255,.04);border:1px solid rgba(0,180,255,.1);color:#D0E8F0;font:10px 'Share Tech Mono',monospace;padding:6px;width:100%;margin-bottom:8px;outline:none">
+  <div style="display:flex;gap:6px">
+    <button class="cb" onclick="localStorage.setItem('atlas_sb_url',document.getElementById('sbUrl').value.trim());localStorage.setItem('atlas_sb_key',document.getElementById('sbKey').value.trim());location.reload()" style="flex:1">SAVE + CONNECT</button>
+    <button class="cb" onclick="document.getElementById('sbCfg').style.display='none'" style="flex:1">CLOSE</button>
+  </div>
+</div>
+<div class="ctrl">
+  <button class="cb" id="bMic">MIC</button>
+  <button class="cb" id="bListen">LISTEN</button>
+  <button class="cb" id="bThink">THINK</button>
+  <button class="cb" id="bTask">TASK</button>
+  <button class="cb" id="bWarn">WARN</button>
+  <button class="cb" id="bTalk">TALK</button>
+</div>
+<script>
+'use strict';
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let W,H;
+function resize(){const d=Math.min(devicePixelRatio,2);W=cv.width=innerWidth*d;H=cv.height=innerHeight*d;ctx.setTransform(d,0,0,d,0,0)}
+resize();addEventListener('resize',resize);
+
+// ── SIMPLEX NOISE (compact 3D) ──
+const G3=1/6,F3=1/3;
+const grad3=[[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
+const perm=new Uint8Array(512);
+{const p=[];for(let i=0;i<256;i++)p[i]=i;for(let i=255;i>0;i--){const j=Math.random()*(i+1)|0;[p[i],p[j]]=[p[j],p[i]]}for(let i=0;i<512;i++)perm[i]=p[i&255]}
+function noise3(x,y,z){
+  const s=(x+y+z)*F3;const i=Math.floor(x+s),j=Math.floor(y+s),k=Math.floor(z+s);
+  const t=(i+j+k)*G3;const X0=x-(i-t),Y0=y-(j-t),Z0=z-(k-t);
+  let i1,j1,k1,i2,j2,k2;
+  if(X0>=Y0){if(Y0>=Z0){i1=1;j1=0;k1=0;i2=1;j2=1;k2=0}else if(X0>=Z0){i1=1;j1=0;k1=0;i2=1;j2=0;k2=1}else{i1=0;j1=0;k1=1;i2=1;j2=0;k2=1}}
+  else{if(Y0<Z0){i1=0;j1=0;k1=1;i2=0;j2=1;k2=1}else if(X0<Z0){i1=0;j1=1;k1=0;i2=0;j2=1;k2=1}else{i1=0;j1=1;k1=0;i2=1;j2=1;k2=0}}
+  const x1=X0-i1+G3,y1=Y0-j1+G3,z1=Z0-k1+G3;
+  const x2=X0-i2+2*G3,y2=Y0-j2+2*G3,z2=Z0-k2+2*G3;
+  const x3=X0-1+3*G3,y3=Y0-1+3*G3,z3=Z0-1+3*G3;
+  const ii=i&255,jj=j&255,kk=k&255;
+  let n=0;
+  const c=(gi,xn,yn,zn)=>{let t2=.6-xn*xn-yn*yn-zn*zn;if(t2<0)return;t2*=t2;const g=grad3[gi%12];n+=t2*t2*(g[0]*xn+g[1]*yn+g[2]*zn)};
+  c(perm[ii+perm[jj+perm[kk]]],X0,Y0,Z0);
+  c(perm[ii+i1+perm[jj+j1+perm[kk+k1]]],x1,y1,z1);
+  c(perm[ii+i2+perm[jj+j2+perm[kk+k2]]],x2,y2,z2);
+  c(perm[ii+1+perm[jj+1+perm[kk+1]]],x3,y3,z3);
+  return 32*n;
+}
+
+// ── FORGE LINK — dual: BroadcastChannel (same device) + Supabase Realtime (cross-device) ──
+let forgeState='disconnected';
+const linkEl=document.getElementById('link');
+
+function handleEvent(d){
+  if(d.type==='forge_ping'||d.type==='forge_pong'||d.type==='atlas_pong'){
+    forgeState='connected';linkEl.textContent='FORGE: LINKED';linkEl.style.color='rgba(57,255,126,.3)';
+  }
+  if(d.type==='forge_think')setState('thinking');
+  if(d.type==='forge_speak'){setState('talking');setTimeout(()=>setState('standby'),4000)}
+  if(d.type==='forge_done'){setState('task');setTimeout(()=>setState('standby'),3000)}
+  if(d.type==='forge_error'){setState('warning');setTimeout(()=>setState('standby'),3000)}
+  if(d.type==='vision_recognized'){setState('task');setTimeout(()=>setState('standby'),3000)}
+  if(d.type==='vision_unknown'){setState('warning');setTimeout(()=>setState('standby'),2500)}
+}
+
+// Transport 1: BroadcastChannel (instant, same device)
+let bcLink=null;
+try{
+  bcLink=new BroadcastChannel('atlas_forge_link');
+  bcLink.onmessage=e=>handleEvent(e.data);
+  setInterval(()=>{if(bcLink)bcLink.postMessage({type:'atlas_ping',state})},5000);
+}catch(e){}
+
+// Transport 2: Supabase Realtime (cross-device)
+let sbChannel=null;
+async function initSupabaseLink(){
+  const sbUrl=localStorage.getItem('atlas_sb_url')||'';
+  const sbKey=localStorage.getItem('atlas_sb_key')||'';
+  if(!sbUrl||!sbKey)return;
+  try{
+    const sc=document.createElement('script');
+    sc.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+    document.head.appendChild(sc);
+    await new Promise((ok,no)=>{sc.onload=ok;sc.onerror=no;setTimeout(no,8000)});
+    const sb=supabase.createClient(sbUrl,sbKey);
+    sbChannel=sb.channel('forge-link',{config:{broadcast:{self:false}}});
+    sbChannel.on('broadcast',{event:'sync'},({payload})=>handleEvent(payload));
+    await sbChannel.subscribe();
+    linkEl.textContent='FORGE: CLOUD';linkEl.style.color='rgba(57,255,126,.3)';
+    forgeState='cloud';
+    setInterval(()=>{if(sbChannel)sbChannel.send({type:'broadcast',event:'sync',payload:{type:'atlas_ping',state}})},6000);
+  }catch(e){linkEl.textContent='FORGE: CLOUD ERR'}
+}
+initSupabaseLink();
+
+// ── STATES ──
+const ST={
+  standby:{top:[60,120,255],bot:[200,50,255],rate:.2,label:'STANDBY'},
+  listening:{top:[80,180,255],bot:[220,80,255],rate:.6,label:'LISTENING'},
+  thinking:{top:[140,60,255],bot:[255,40,200],rate:1.2,label:'PROCESSING'},
+  task:{top:[40,220,140],bot:[60,255,180],rate:.35,label:'COMPLETE'},
+  warning:{top:[255,60,40],bot:[255,100,30],rate:1.5,label:'ALERT'},
+  talking:{top:[60,160,255],bot:[180,60,255],rate:.5,label:'SPEAKING'},
+};
+let state='standby',stateT=0;
+let tTop=[60,120,255],tBot=[200,50,255];
+let cTop=[...tTop],cBot=[...tBot],pRate=.2;
+function setState(s){if(!ST[s]||s===state)return;state=s;stateT=0;const st=ST[s];tTop=[...st.top];tBot=[...st.bot];pRate=st.rate;document.getElementById('stLbl').textContent=st.label}
+document.getElementById('bMic').onclick=()=>micToggle();
+document.getElementById('bListen').onclick=()=>setState('listening');
+document.getElementById('bThink').onclick=()=>setState('thinking');
+document.getElementById('bTask').onclick=()=>{setState('task');setTimeout(()=>setState('standby'),3500)};
+document.getElementById('bWarn').onclick=()=>{setState('warning');setTimeout(()=>setState('standby'),3500)};
+document.getElementById('bTalk').onclick=()=>{setState('talking');setTimeout(()=>setState('standby'),5000)};
+
+// ── AUDIO ──
+let actx,analyser,micStream,micOn=false;
+let fq=new Uint8Array(128),vol=0,bass=0;
+function micToggle(){
+  if(micOn){micOn=false;if(micStream)micStream.getTracks().forEach(t=>t.stop());document.getElementById('bMic').classList.remove('on');setState('standby');return}
+  navigator.mediaDevices.getUserMedia({audio:true}).then(s=>{
+    micStream=s;micOn=true;actx=actx||new(AudioContext||webkitAudioContext)();
+    analyser=actx.createAnalyser();analyser.fftSize=256;analyser.smoothingTimeConstant=.82;
+    actx.createMediaStreamSource(s).connect(analyser);fq=new Uint8Array(analyser.frequencyBinCount);
+    document.getElementById('bMic').classList.add('on');setState('listening');
+  }).catch(()=>{});
+}
+function audioTick(){
+  if(!analyser||!micOn){vol*=.92;bass*=.92;return}
+  analyser.getByteFrequencyData(fq);
+  let s=0,b=0;const th=fq.length/3|0;
+  for(let i=0;i<fq.length;i++)s+=fq[i];
+  for(let i=0;i<th;i++)b+=fq[i];
+  vol+=(s/fq.length/255-vol)*.14;
+  bass+=(b/th/255-bass)*.1;
+}
+
+// ── SPHERE MESH ──
+const LATS=40,LONS=50,BASE_R=160;
+function buildVerts(time,noiseAmt){
+  const verts=[];
+  for(let i=0;i<=LATS;i++){
+    const row=[];
+    const lat=Math.PI*i/LATS-Math.PI/2;
+    for(let j=0;j<=LONS;j++){
+      const lon=2*Math.PI*j/LONS;
+      const x=Math.cos(lat)*Math.cos(lon);
+      const y=Math.sin(lat);
+      const z=Math.cos(lat)*Math.sin(lon);
+      // Noise displacement
+      const n=noise3(x*1.8+time*.15,y*1.8+time*.1,z*1.8+time*.12);
+      const disp=1+n*noiseAmt;
+      row.push([x*BASE_R*disp,y*BASE_R*disp,z*BASE_R*disp]);
+    }
+    verts.push(row);
+  }
+  return verts;
+}
+
+// ── SCATTERED PARTICLES ──
+const pts=[];
+for(let i=0;i<300;i++){
+  const a=Math.random()*6.28,p=Math.acos(2*Math.random()-1);
+  pts.push({a,p,r:BASE_R*(1.1+Math.random()*.6),sp:.001+Math.random()*.003,sz:.5+Math.random()*2,al:.1+Math.random()*.4,ph:Math.random()*6.28,dr:Math.random()*.002});
+}
+
+// ── RENDER ──
+let t=0;
+const L3=(a,b,f)=>[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f];
+
+function frame(){
+  requestAnimationFrame(frame);
+  t+=.016;stateT+=.016;
+  audioTick();
+  const w=innerWidth,h=innerHeight,cx=w/2,cy=h/2;
+  cTop=L3(cTop,tTop,.03);cBot=L3(cBot,tBot,.03);
+  const pulse=Math.sin(t*pRate*6.28)*.5+.5;
+  const noiseAmt=.18+vol*.4+pulse*.05+bass*.15;
+
+  // Background gradient
+  const bg=ctx.createRadialGradient(cx,cy*.85,0,cx,cy,w*.6);
+  bg.addColorStop(0,'#120a2a');bg.addColorStop(.5,'#0a0618');bg.addColorStop(1,'#050310');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
+
+  // Camera rotation
+  const rotY=t*.25;
+  const rotX=.35+Math.sin(t*.15)*.1;
+  const cosY=Math.cos(rotY),sinY=Math.sin(rotY);
+  const cosX=Math.cos(rotX),sinX=Math.sin(rotX);
+
+  // Build displaced vertices
+  const verts=buildVerts(t,noiseAmt);
+
+  // Project function
+  const fov=500;
+  const camZ=400;
+  function proj(v){
+    let x=v[0],y=v[1],z=v[2];
+    // Rotate Y
+    const tx=x*cosY-z*sinY;const tz=x*sinY+z*cosY;x=tx;z=tz;
+    // Rotate X
+    const ty=y*cosX-z*sinX;const tz2=y*sinX+z*cosX;y=ty;z=tz2;
+    const d=camZ+z;
+    if(d<10)return null;
+    return{x:cx+x*fov/d,y:cy+y*fov/d,z,d,oy:v[1]};
+  }
+
+  // Project all vertices
+  const pv=verts.map(row=>row.map(v=>proj(v)));
+
+  // ── GLOW behind sphere ──
+  const glow=ctx.createRadialGradient(cx,cy,BASE_R*.3,cx,cy,BASE_R*1.5);
+  glow.addColorStop(0,`rgba(${cBot.map(v=>v*.4|0).join(',')},${.06+vol*.04+pulse*.02})`);
+  glow.addColorStop(.5,`rgba(${cBot.map(v=>v*.2|0).join(',')},${.02})`);
+  glow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=glow;ctx.beginPath();ctx.arc(cx,cy,BASE_R*1.5,0,6.28);ctx.fill();
+
+  // Bottom glow (magenta hotspot)
+  const botGlow=ctx.createRadialGradient(cx,cy+BASE_R*.6,0,cx,cy+BASE_R*.6,BASE_R);
+  botGlow.addColorStop(0,`rgba(${cBot.map(v=>v|0).join(',')},${.06+vol*.03})`);
+  botGlow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=botGlow;ctx.beginPath();ctx.arc(cx,cy+BASE_R*.6,BASE_R,0,6.28);ctx.fill();
+
+  // ── DRAW WIREFRAME ──
+  // Latitude lines
+  for(let i=0;i<=LATS;i++){
+    ctx.beginPath();
+    let started=false;
+    for(let j=0;j<=LONS;j++){
+      const p=pv[i][j];
+      if(!p)continue;
+      // Color: gradient from blue (top) to magenta (bottom)
+      const yNorm=(p.oy/BASE_R+1)/2; // 0=bottom, 1=top
+      const r=(cTop[0]*yNorm+cBot[0]*(1-yNorm))|0;
+      const g=(cTop[1]*yNorm+cBot[1]*(1-yNorm))|0;
+      const b=(cTop[2]*yNorm+cBot[2]*(1-yNorm))|0;
+      // Depth fade
+      const depthAlpha=Math.max(0,Math.min(1,(p.z+BASE_R*1.5)/(BASE_R*3)));
+      const alpha=(.15+depthAlpha*.45+vol*.15+pulse*.05);
+      ctx.strokeStyle=`rgba(${r},${g},${b},${alpha})`;
+      ctx.lineWidth=.4+depthAlpha*.8;
+      if(!started){ctx.moveTo(p.x,p.y);started=true}
+      else ctx.lineTo(p.x,p.y);
+    }
+    ctx.stroke();
+  }
+  // Longitude lines
+  for(let j=0;j<=LONS;j++){
+    ctx.beginPath();
+    let started=false;
+    for(let i=0;i<=LATS;i++){
+      const p=pv[i][j];
+      if(!p)continue;
+      const yNorm=(p.oy/BASE_R+1)/2;
+      const r=(cTop[0]*yNorm+cBot[0]*(1-yNorm))|0;
+      const g=(cTop[1]*yNorm+cBot[1]*(1-yNorm))|0;
+      const b=(cTop[2]*yNorm+cBot[2]*(1-yNorm))|0;
+      const depthAlpha=Math.max(0,Math.min(1,(p.z+BASE_R*1.5)/(BASE_R*3)));
+      const alpha=(.12+depthAlpha*.4+vol*.12+pulse*.04);
+      ctx.strokeStyle=`rgba(${r},${g},${b},${alpha})`;
+      ctx.lineWidth=.3+depthAlpha*.6;
+      if(!started){ctx.moveTo(p.x,p.y);started=true}
+      else ctx.lineTo(p.x,p.y);
+    }
+    ctx.stroke();
+  }
+
+  // ── VERTEX DOTS (bright at intersections) ──
+  for(let i=0;i<=LATS;i+=2){
+    for(let j=0;j<=LONS;j+=2){
+      const p=pv[i][j];
+      if(!p)continue;
+      const depthAlpha=Math.max(0,Math.min(1,(p.z+BASE_R*1.5)/(BASE_R*3)));
+      if(depthAlpha<.2)continue;
+      const yNorm=(p.oy/BASE_R+1)/2;
+      const r=(cTop[0]*yNorm+cBot[0]*(1-yNorm))|0;
+      const g=(cTop[1]*yNorm+cBot[1]*(1-yNorm))|0;
+      const b=(cTop[2]*yNorm+cBot[2]*(1-yNorm))|0;
+      const sz=.8+depthAlpha*1.2+vol;
+      ctx.fillStyle=`rgba(${Math.min(255,r+60)},${Math.min(255,g+60)},${Math.min(255,b+60)},${depthAlpha*.5+vol*.2})`;
+      ctx.beginPath();ctx.arc(p.x,p.y,sz,0,6.28);ctx.fill();
+    }
+  }
+
+  // ── SCATTERED PARTICLES ──
+  pts.forEach(p=>{
+    p.a+=p.sp*(1+vol*2);p.p+=p.dr;
+    const r=p.r+Math.sin(t+p.ph)*15+vol*30;
+    let x=Math.cos(p.a)*Math.sin(p.p)*r;
+    let y=Math.cos(p.p)*r;
+    let z=Math.sin(p.a)*Math.sin(p.p)*r;
+    const tx=x*cosY-z*sinY;z=x*sinY+z*cosY;x=tx;
+    const ty=y*cosX-z*sinX;z=y*sinX+z*cosX;y=ty;
+    const d=camZ+z;if(d<10)return;
+    const sx=cx+x*fov/d,sy=cy+y*fov/d;
+    const depthAlpha=Math.max(0,(z+BASE_R*2)/(BASE_R*4));
+    const yNorm=Math.max(0,Math.min(1,(p.p/Math.PI)));
+    const pr=(cTop[0]*yNorm+cBot[0]*(1-yNorm))|0;
+    const pg=(cTop[1]*yNorm+cBot[1]*(1-yNorm))|0;
+    const pb=(cTop[2]*yNorm+cBot[2]*(1-yNorm))|0;
+    ctx.fillStyle=`rgba(${pr},${pg},${pb},${p.al*depthAlpha*(.3+vol*.3)})`;
+    ctx.beginPath();ctx.arc(sx,sy,p.sz*(depthAlpha+.3),0,6.28);ctx.fill();
+  });
+
+  // ── STATE EFFECTS ──
+  if(state==='thinking'){
+    for(let i=0;i<3;i++){
+      const sa=t*(1+i*.3)+i*2.09;const sr=BASE_R*1.3;
+      ctx.strokeStyle=`rgba(${cBot.map(v=>v|0).join(',')},${(.03+pulse*.02)/(i+1)})`;
+      ctx.lineWidth=.5;ctx.beginPath();
+      ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(sa)*sr,cy+Math.sin(sa)*sr*.6);ctx.stroke();
+    }
+  }
+  if(state==='talking'){
+    ctx.strokeStyle=`rgba(${cTop.map(v=>v|0).join(',')},${.08+vol*.15})`;ctx.lineWidth=1;
+    ctx.beginPath();
+    for(let i=0;i<=60;i++){const a=i/60*6.28;
+      const amp=micOn?(fq[i%fq.length]/255*20):(Math.sin(t*7+i*.5)*5*pulse);
+      ctx[i?'lineTo':'moveTo'](cx+Math.cos(a)*(BASE_R+30+amp),cy+Math.sin(a)*(BASE_R+30+amp)*.55);}
+    ctx.closePath();ctx.stroke();
+  }
+  if(state==='warning'){
+    const wa=Math.sin(t*8)*.5+.5;
+    if(wa>.3){ctx.strokeStyle=`rgba(255,50,30,${wa*.12})`;ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(cx,cy,BASE_R*1.2+wa*8,0,6.28);ctx.stroke();}
+  }
+  if(state==='task'){
+    for(let i=0;i<6;i++){const st2=(stateT*1.5+i*.45)%3.5;if(st2>2.5)continue;
+      ctx.fillStyle=`rgba(${cTop.map(v=>v|0).join(',')},${(1-st2/2.5)*.35})`;
+      ctx.beginPath();ctx.arc(cx+Math.sin(i*1.5+t)*30,cy-st2*50,1.5+(1-st2/2.5)*2,0,6.28);ctx.fill();}
+  }
+}
+requestAnimationFrame(frame);
+</script></body></html>
