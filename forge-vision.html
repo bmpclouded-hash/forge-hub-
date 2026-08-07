@@ -1,0 +1,875 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FORGE Vision</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#040608;--cy:#00C8FF;--am:#FFB020;--gn:#39FF7E;--rd:#FF4060;--tx:#D0E8F0;--mt:#4A6070;--bd:rgba(0,200,255,.12);--mn:'Share Tech Mono','Courier New',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;background:var(--bg);color:var(--tx);font-family:'Inter',sans-serif;font-size:12px}
+header{background:rgba(0,10,18,.93);border-bottom:1px solid var(--bd);padding:12px 20px;display:flex;align-items:center;gap:16px}
+header h1{font:700 20px/1 'Rajdhani',sans-serif;letter-spacing:.14em;color:var(--cy);text-shadow:0 0 14px rgba(0,200,255,.5)}
+.bg{font:9px var(--mn);background:rgba(0,200,255,.1);color:var(--cy);padding:3px 8px;border:1px solid var(--bd)}
+.bg.ok{color:var(--gn);border-color:rgba(57,255,126,.3)}.bg.err{color:var(--rd);border-color:rgba(255,64,96,.3)}
+nav{display:flex;gap:0;margin-left:auto}
+.tab{font:600 11px/1 'Rajdhani',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--mt);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;padding:8px 14px;transition:.15s}
+.tab:hover{color:var(--cy)}.tab.on{color:var(--cy);border-bottom-color:var(--cy)}
+main{max-width:1300px;margin:16px auto;padding:0 16px}
+.pane{display:none}.pane.on{display:block}
+.g2{display:grid;grid-template-columns:1.5fr 1fr;gap:14px}
+@media(max-width:860px){.g2{grid-template-columns:1fr}}
+.stk{display:flex;flex-direction:column;gap:12px}
+.p{background:rgba(0,200,255,.02);border:1px solid var(--bd);padding:14px}
+.ph{font:700 10.5px/1 'Rajdhani',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--cy);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(0,200,255,.1);display:flex;justify-content:space-between;align-items:center}
+.btn{font:700 11px/1 'Rajdhani',sans-serif;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--cy);background:none;color:var(--cy);padding:7px 14px;cursor:pointer;transition:.15s}
+.btn:hover:not(:disabled){background:var(--cy);color:#000}.btn:disabled{opacity:.3;cursor:not-allowed}
+.btn.go{border-color:var(--gn);color:var(--gn)}.btn.go:hover:not(:disabled){background:var(--gn);color:#000}
+.btn.danger{border-color:var(--rd);color:var(--rd)}.btn.danger:hover{background:var(--rd);color:#fff}
+input,select,textarea{background:rgba(0,200,255,.04);border:1px solid var(--bd);color:var(--tx);font:12px var(--mn);padding:7px 10px;outline:none;width:100%}
+input:focus,select:focus{border-color:var(--cy)}
+.feed{position:relative;background:#000;border:1px solid var(--bd);aspect-ratio:4/3;overflow:hidden}
+.feed video,.feed canvas{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
+.feed canvas{z-index:2}
+.hint{font:10px/1.5 var(--mn);color:var(--mt);margin-top:4px}
+.user-card{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--bd);margin-bottom:6px;cursor:pointer;transition:border-color .15s}
+.user-card:hover{border-color:var(--cy)}
+.user-card img{width:48px;height:48px;object-fit:cover;border:1px solid var(--cy);flex-shrink:0}
+.user-card .nm{font:700 13px 'Rajdhani',sans-serif;color:var(--cy)}
+.user-card .meta{font:9px var(--mn);color:var(--mt)}
+.le{font:10px var(--mn);color:var(--mt);padding:4px 0;border-bottom:1px solid rgba(0,200,255,.06)}
+.le .lt{color:rgba(0,200,255,.4);margin-right:6px}
+.le.match{color:var(--gn)}.le.unknown{color:var(--am)}
+.step-badge{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border:2px solid var(--cy);font:700 11px 'Rajdhani',sans-serif;color:var(--cy);margin-right:6px;flex-shrink:0}
+.step-badge.done{background:var(--gn);border-color:var(--gn);color:#000}
+.step-badge.active{border-color:var(--am);color:var(--am);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+</style></head><body>
+<header>
+  <h1>FORGE VISION</h1>
+  <span class="bg" id="detectMode">--</span>
+  <nav>
+    <button class="tab on" data-t="detect">DETECT</button>
+    <button class="tab" data-t="users">USERS</button>
+    <button class="tab" data-t="log">LOG</button>
+    <button class="tab" data-t="settings">SETTINGS</button>
+    <button class="tab" data-t="dash">DASHBOARD</button>
+  </nav>
+</header>
+<main>
+<div class="pane on" id="p-detect"><div class="g2"><div class="stk">
+  <div class="p">
+    <div class="ph">CAMERA <span class="bg" id="camBg">OFF</span></div>
+    <div style="margin-bottom:6px"><select class="btn" id="camSelect" style="border-color:var(--mt);color:var(--mt);width:100%;text-align:left"><option value="">Select camera...</option></select></div>
+    <div class="feed"><video id="vid" autoplay playsinline muted></video><canvas id="ov"></canvas></div>
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn" id="camOn">START</button>
+      <button class="btn" id="camOff" disabled>STOP</button>
+      <button class="btn go" id="scanOnce" disabled>SCAN</button>
+      <button class="btn" id="scanLoop" disabled style="border-color:var(--am);color:var(--am)">CONTINUOUS</button>
+      <button class="btn" id="zoomIn" disabled style="border-color:var(--mt);color:var(--mt)">ZOOM +</button>
+      <button class="btn" id="zoomOut" disabled style="border-color:var(--mt);color:var(--mt)">ZOOM -</button>
+      <button class="btn" id="streamBtn" disabled style="border-color:var(--mt);color:var(--mt)">STREAM</button>
+    </div>
+    <div class="hint" id="camSt">Initializing...</div>
+  </div>
+  <div class="p">
+    <div class="ph">ENROLL NEW USER</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
+      <input id="eName" placeholder="Name"><input id="eRole" placeholder="Role"><select id="eAccess"><option value="full">Full</option><option value="limited">Limited</option><option value="visitor">Visitor</option></select>
+    </div>
+    <div id="enrollSteps" style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;margin-bottom:6px"><span class="step-badge" id="es1">1</span><span>Front — look straight at camera</span></div>
+      <div style="display:flex;align-items:center;margin-bottom:6px"><span class="step-badge" id="es2">2</span><span>Left — turn head left ~45°</span></div>
+      <div style="display:flex;align-items:center;margin-bottom:6px"><span class="step-badge" id="es3">3</span><span>Right — turn head right ~45°</span></div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="btn go" id="enrollBtn" disabled style="flex:1">CAPTURE FRONT</button>
+      <button class="btn" id="enrollSkip" disabled style="border-color:var(--mt);color:var(--mt)">SKIP SIDES</button>
+    </div>
+    <div class="hint" id="eSt">Start camera first.</div>
+  </div>
+</div><div class="stk">
+  <div class="p">
+    <div class="ph">LIVE <span class="bg" id="recBg">--</span></div>
+    <div id="liveMatch" style="min-height:60px"><div class="hint">Start scanning to identify.</div></div>
+  </div>
+  <div class="p"><div class="ph">RECENT</div><div id="recentDet" style="max-height:250px;overflow-y:auto"></div></div>
+  <div class="p">
+    <div class="ph">STATS</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+      <div><div style="font:24px var(--mn);color:var(--cy)" id="stTotal">0</div><div class="hint" style="margin:0">ENROLLED</div></div>
+      <div><div style="font:24px var(--mn);color:var(--gn)" id="stMatch">0</div><div class="hint" style="margin:0">MATCHED</div></div>
+      <div><div style="font:24px var(--mn);color:var(--am)" id="stUnk">0</div><div class="hint" style="margin:0">UNKNOWN</div></div>
+    </div>
+  </div>
+</div></div></div>
+
+<div class="pane" id="p-users"><div class="g2">
+  <div class="p"><div class="ph">ENROLLED <span class="bg" id="uCount">0</span></div><div id="uList"></div></div>
+  <div class="stk">
+    <div class="p"><div class="ph">DETAIL</div><div id="uDetail"><div class="hint">Select a user.</div></div></div>
+    <div class="p"><button class="btn danger" id="clearAll" style="width:100%">CLEAR ALL</button></div>
+  </div>
+</div></div>
+
+<div class="pane" id="p-log"><div class="p">
+  <div class="ph">LOG <button class="btn danger" id="clearLog" style="font-size:8px;padding:4px 8px">CLEAR</button></div>
+  <div id="fullLog" style="max-height:500px;overflow-y:auto"></div>
+</div></div>
+
+<div class="pane" id="p-settings"><div class="g2">
+  <div class="p">
+    <div class="ph">RECOGNITION</div>
+    <div><div class="hint" style="margin-bottom:3px">MATCH THRESHOLD (lower = stricter)</div>
+    <input type="range" id="matchDist" min="20" max="80" step="5" value="50"><span id="distVal" style="font:10px var(--mn);color:var(--cy)">50</span></div>
+    <div style="margin-top:8px"><div class="hint" style="margin-bottom:3px">SCAN INTERVAL (ms)</div>
+    <input type="number" id="scanInt" value="1000" min="500" max="3000" step="100"></div>
+  </div>
+  <div class="p">
+    <div class="ph">VOICE</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="voiceOn" style="width:auto"><span>Greet on recognition</span></div>
+    <select id="voiceSel" style="margin-bottom:8px"></select>
+    <div style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="atlasSync" style="width:auto"><span>Sync to Atlas Core</span></div>
+  </div>
+  <div class="p">
+    <div class="ph">CLOUD LINK (Supabase)</div>
+    <input id="vSbUrl" placeholder="Supabase project URL" style="margin-bottom:5px">
+    <input id="vSbKey" placeholder="Supabase anon key" style="margin-bottom:6px">
+    <button class="btn" id="vSbSave" style="width:100%">SAVE + RECONNECT</button>
+    <div class="hint" id="vSbSt">Not configured — stream only works on same device.</div>
+  </div>
+  <div class="p"><div class="ph">DATA</div>
+    <div style="display:flex;gap:8px"><button class="btn" id="exportData">EXPORT</button><button class="btn" id="importData">IMPORT</button><button class="btn danger" id="wipeAll">WIPE</button></div>
+  </div>
+</div></div>
+<div class="pane" id="p-dash">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div style="font:700 12px 'Rajdhani',sans-serif;letter-spacing:.1em;color:var(--cy)">MULTI-CAM DASHBOARD</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn" id="dashAdd">+ ADD FEED</button>
+      <button class="btn" id="dashFull" style="border-color:var(--mt);color:var(--mt)">FULLSCREEN</button>
+    </div>
+  </div>
+  <div id="dashGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#000;padding:8px;border:1px solid var(--bd);min-height:400px">
+    <div style="display:flex;align-items:center;justify-content:center;border:1px dashed rgba(0,200,255,.15);aspect-ratio:4/3;color:var(--mt);font:10px var(--mn)">Click + ADD FEED to start</div>
+  </div>
+</div>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const vid=$('vid'),ov=$('ov'),octx=ov.getContext('2d');
+
+// ── TABS ──
+document.querySelectorAll('.tab').forEach(t=>t.onclick=function(){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===this));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.toggle('on',x.id==='p-'+this.dataset.t));
+});
+
+// ── STORAGE ──
+const users={a:()=>{try{return JSON.parse(localStorage.getItem('fv_users'))||[]}catch{return[]}},s:u=>{try{localStorage.setItem('fv_users',JSON.stringify(u))}catch{}}};
+const logs={a:()=>{try{return JSON.parse(localStorage.getItem('fv_log'))||[]}catch{return[]}},s:l=>{try{localStorage.setItem('fv_log',JSON.stringify(l))}catch{}}};
+let matchCount=+(localStorage.getItem('fv_mc')||0),unkCount=+(localStorage.getItem('fv_uc')||0);
+
+function fvLog(msg,type){
+  const ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const l=logs.a();l.unshift({ts,msg,type});if(l.length>200)l.pop();logs.s(l);
+  const el=document.createElement('div');el.className='le'+(type==='match'?' match':type==='unknown'?' unknown':'');
+  el.innerHTML='<span class="lt">'+ts+'</span>'+msg;
+  ['recentDet','fullLog'].forEach(id=>{const p=$(id);if(p){p.prepend(el.cloneNode(true));while(p.children.length>60)p.removeChild(p.lastChild);}});
+}
+
+// ── FACE DETECTION — Native API only (no skin tone) ──
+let detector=null,hasNative=false;
+
+async function initDetector(){
+  if(typeof FaceDetector!=='undefined'){
+    try{
+      detector=new FaceDetector({fastMode:true,maxDetectedFaces:5});
+      const tc=document.createElement('canvas');tc.width=2;tc.height=2;
+      await detector.detect(tc);
+      hasNative=true;
+      $('detectMode').textContent='NATIVE';$('detectMode').classList.add('ok');
+      $('camSt').textContent='Face detection ready. Start camera.';
+      fvLog('Native FaceDetector available','system');
+    }catch(e){
+      fvLog('Native test: '+e.message,'system');
+      $('detectMode').textContent='GUIDED';
+      $('camSt').textContent='No native detection. Position face in guide oval.';
+      fvLog('Using guided mode — position face in the oval','system');
+    }
+  }else{
+    $('detectMode').textContent='GUIDED';
+    $('camSt').textContent='No native detection. Position face in guide oval.';
+    fvLog('FaceDetector API not in this browser — guided mode','system');
+  }
+}
+initDetector();
+
+// ── MOTION DETECTION ──
+const motionCanvas=document.createElement('canvas');
+const mctx=motionCanvas.getContext('2d',{willReadFrequently:true});
+let prevFrame=null,motionLevel=0,motionRegion=null;
+
+function detectMotion(){
+  if(!vid.videoWidth)return 0;
+  const w=160,h=(vid.videoHeight/vid.videoWidth*160)|0||120;
+  motionCanvas.width=w;motionCanvas.height=h;
+  mctx.drawImage(vid,0,0,w,h);
+  const curr=mctx.getImageData(0,0,w,h);
+  if(!prevFrame){prevFrame=curr;return 0;}
+  const cd=curr.data,pd=prevFrame.data;
+  let totalDiff=0,mxMin=w,myMin=h,mxMax=0,myMax=0,movePixels=0;
+  for(let i=0;i<cd.length;i+=4){
+    const diff=Math.abs(cd[i]-pd[i])+Math.abs(cd[i+1]-pd[i+1])+Math.abs(cd[i+2]-pd[i+2]);
+    if(diff>60){// significant pixel change
+      movePixels++;totalDiff+=diff;
+      const px=(i/4)%w,py=(i/4)/w|0;
+      if(px<mxMin)mxMin=px;if(px>mxMax)mxMax=px;
+      if(py<myMin)myMin=py;if(py>myMax)myMax=py;
+    }
+  }
+  prevFrame=curr;
+  motionLevel=movePixels/(w*h);
+  if(movePixels>50){
+    const sx=vid.videoWidth/w,sy=vid.videoHeight/h;
+    motionRegion={x:mxMin*sx,y:myMin*sy,width:(mxMax-mxMin)*sx,height:(myMax-myMin)*sy};
+  }else motionRegion=null;
+  return motionLevel;
+}
+
+// ── AUTO-ZOOM for distant faces ──
+const zoomCanvas=document.createElement('canvas');
+const zctx=zoomCanvas.getContext('2d',{willReadFrequently:true});
+
+async function detectWithZoom(){
+  if(!camStream||!vid.videoWidth)return[];
+  if(ov.width!==vid.videoWidth){ov.width=vid.videoWidth;ov.height=vid.videoHeight;}
+
+  // Run motion detection
+  const motion=detectMotion();
+
+  let faces=[];
+  if(hasNative&&detector){
+    try{faces=await detector.detect(vid);
+      faces=faces.map(f=>({x:f.boundingBox.x,y:f.boundingBox.y,width:f.boundingBox.width,height:f.boundingBox.height,confidence:95,native:true}));
+    }catch(e){}
+
+    // Check if faces are small (far away) — if face width < 15% of frame, zoom and re-scan
+    const smallFaces=faces.filter(f=>f.width<vid.videoWidth*.15);
+    if(smallFaces.length){
+      for(const sf of smallFaces){
+        // Crop a 3x region around the small face
+        const pad=Math.max(sf.width,sf.height)*1.5;
+        const zx=Math.max(0,sf.x-pad),zy=Math.max(0,sf.y-pad);
+        const zw=Math.min(vid.videoWidth-zx,sf.width+pad*2);
+        const zh=Math.min(vid.videoHeight-zy,sf.height+pad*2);
+        zoomCanvas.width=640;zoomCanvas.height=(zh/zw*640)|0;
+        zctx.drawImage(vid,zx,zy,zw,zh,0,0,zoomCanvas.width,zoomCanvas.height);
+        // Re-detect on zoomed crop
+        try{
+          const zoomFaces=await detector.detect(zoomCanvas);
+          if(zoomFaces.length){
+            // Map zoomed coords back to original
+            const scaleX=zw/zoomCanvas.width,scaleY=zh/zoomCanvas.height;
+            zoomFaces.forEach(zf=>{
+              sf.zoomed=true;
+              sf.zoomThumb=zoomCanvas.toDataURL('image/jpeg',.6);
+            });
+          }
+        }catch(e){}
+      }
+    }
+
+    // If no faces but motion detected, zoom into motion region
+    if(!faces.length&&motionRegion&&motionRegion.width>30){
+      const mr=motionRegion;
+      const pad=Math.max(mr.width,mr.height)*.5;
+      const zx=Math.max(0,mr.x-pad),zy=Math.max(0,mr.y-pad);
+      const zw=Math.min(vid.videoWidth-zx,mr.width+pad*2);
+      const zh=Math.min(vid.videoHeight-zy,mr.height+pad*2);
+      if(zw>20&&zh>20){
+        zoomCanvas.width=640;zoomCanvas.height=(zh/zw*640)|0||480;
+        zctx.drawImage(vid,zx,zy,zw,zh,0,0,zoomCanvas.width,zoomCanvas.height);
+        try{
+          const zf=await detector.detect(zoomCanvas);
+          if(zf.length){
+            const scaleX=zw/zoomCanvas.width,scaleY=zh/zoomCanvas.height;
+            faces=zf.map(f=>({
+              x:zx+f.boundingBox.x*scaleX,y:zy+f.boundingBox.y*scaleY,
+              width:f.boundingBox.width*scaleX,height:f.boundingBox.height*scaleY,
+              confidence:85,native:true,zoomed:true
+            }));
+          }
+        }catch(e){}
+      }
+    }
+  }else{
+    // Guided mode — use motion to find people, or use the guide oval
+    const zoom=window._camZoom?window._camZoom():1;
+
+    if(motionRegion&&motionLevel>.015&&motionRegion.width>30&&motionRegion.height>40){
+      // Motion detected — use the motion region as a face candidate
+      // Apply digital zoom: crop motion area and scale up for better features
+      const mr=motionRegion;
+      const pad=Math.max(mr.width,mr.height)*.3;
+      const zx=Math.max(0,mr.x-pad),zy=Math.max(0,mr.y-pad);
+      const zw=Math.min(vid.videoWidth-zx,mr.width+pad*2);
+      const zh=Math.min(vid.videoHeight-zy,mr.height+pad*2);
+      // Only use if the region is roughly person-shaped (taller than wide, or square-ish)
+      const aspect=zw/Math.max(1,zh);
+      if(aspect>0.3&&aspect<2){
+        faces=[{x:zx,y:zy,width:zw,height:zh,confidence:40,motion:true}];
+      }
+    }
+
+    // If digital zoom > 1, apply it to the video crop
+    if(zoom>1&&!faces.length){
+      const cw=vid.videoWidth/zoom,ch=vid.videoHeight/zoom;
+      const cx=(vid.videoWidth-cw)/2,cy=(vid.videoHeight-ch)/2;
+      // Check for motion in zoomed region
+      if(motionRegion&&motionLevel>.01){
+        const mr=motionRegion;
+        if(mr.x>=cx&&mr.y>=cy&&mr.x+mr.width<=cx+cw&&mr.y+mr.height<=cy+ch){
+          faces=[{x:mr.x,y:mr.y,width:mr.width,height:mr.height,confidence:40,motion:true,zoomed:true}];
+        }
+      }
+    }
+
+    // Fallback: guide oval
+    if(!faces.length){
+      const gw=vid.videoWidth*.45,gh=vid.videoHeight*.55;
+      faces=[{x:(vid.videoWidth-gw)/2,y:(vid.videoHeight-gh)/2-.05*vid.videoHeight,width:gw,height:gh,confidence:50,guided:true}];
+    }
+  }
+
+  // Estimate distance for each face
+  faces.forEach(f=>{
+    const facePct=f.width/vid.videoWidth*100;
+    if(facePct>30)f.distance='close';
+    else if(facePct>15)f.distance='near';
+    else if(facePct>8)f.distance='mid';
+    else f.distance='far';
+  });
+
+  return faces;
+}
+
+async function detect(){
+  if(!camStream||!vid.videoWidth)return[];
+  if(ov.width!==vid.videoWidth){ov.width=vid.videoWidth;ov.height=vid.videoHeight;}
+  if(hasNative&&detector){
+    try{
+      const faces=await detector.detect(vid);
+      return faces.map(f=>({x:f.boundingBox.x,y:f.boundingBox.y,width:f.boundingBox.width,height:f.boundingBox.height,confidence:95,native:true}));
+    }catch(e){return[];}
+  }
+  // Guided mode — return the guide oval region as a "face"
+  const gw=vid.videoWidth*.45,gh=vid.videoHeight*.55;
+  const gx=(vid.videoWidth-gw)/2,gy=(vid.videoHeight-gh)/2-.05*vid.videoHeight;
+  return[{x:gx,y:gy,width:gw,height:gh,confidence:50,guided:true}];
+}
+
+// ── GUIDE OVAL — drawn continuously on the overlay ──
+let guideActive=false;
+function drawGuide(){
+  if(!camStream||hasNative||!guideActive)return;
+  const w=ov.width,h=ov.height;
+  const cx=w/2,cy=h*.47;
+  const rx=w*.22,ry=h*.27;
+  octx.strokeStyle='rgba(0,200,255,.3)';octx.lineWidth=2;octx.setLineDash([8,6]);
+  octx.beginPath();octx.ellipse(cx,cy,rx,ry,0,0,6.28);octx.stroke();
+  octx.setLineDash([]);
+  octx.font='11px Share Tech Mono,monospace';octx.fillStyle='rgba(0,200,255,.25)';
+  octx.textAlign='center';octx.fillText('POSITION FACE HERE',cx,cy+ry+18);octx.textAlign='start';
+}
+
+// ── FEATURE EXTRACTION ──
+function extractFeatures(video,box){
+  const fc=document.createElement('canvas');fc.width=64;fc.height=64;
+  const fctx=fc.getContext('2d',{willReadFrequently:true});
+  fctx.drawImage(video,box.x,box.y,box.width,box.height,0,0,64,64);
+  const d=fctx.getImageData(0,0,64,64).data;
+  const gray=new Uint8Array(4096);
+  for(let i=0;i<d.length;i+=4)gray[i/4]=(d[i]*77+d[i+1]*150+d[i+2]*29)>>8;
+
+  // 1. Grayscale histogram (16 bins)
+  const hist=new Float32Array(16);
+  for(let i=0;i<4096;i++)hist[gray[i]>>4]++;
+  for(let i=0;i<16;i++)hist[i]/=4096;
+
+  // 2. Row brightness (16 sampled rows)
+  const rows=new Float32Array(16);
+  for(let r=0;r<16;r++){const y=r*4;let s=0;for(let x=0;x<64;x++)s+=gray[y*64+x];rows[r]=s/64/255;}
+
+  // 3. Column brightness (16 sampled cols)
+  const cols=new Float32Array(16);
+  for(let c=0;c<16;c++){const x=c*4;let s=0;for(let y=0;y<64;y++)s+=gray[y*64+x];cols[c]=s/64/255;}
+
+  // 4. Quadrant color averages (4 quads x 3 channels = 12)
+  const qc=new Float32Array(12);
+  [[0,0,32,32],[32,0,64,32],[0,32,32,64],[32,32,64,64]].forEach(([x1,y1,x2,y2],qi)=>{
+    let sr=0,sg=0,sb=0,n=0;
+    for(let y=y1;y<y2;y++)for(let x=x1;x<x2;x++){const i=(y*64+x)*4;sr+=d[i];sg+=d[i+1];sb+=d[i+2];n++;}
+    qc[qi*3]=sr/n/255;qc[qi*3+1]=sg/n/255;qc[qi*3+2]=sb/n/255;
+  });
+
+  // 5. Symmetry score
+  let sym=0;for(let y=0;y<64;y++)for(let x=0;x<32;x++){sym+=1-Math.abs(gray[y*64+x]-gray[y*64+(63-x)])/255;}
+  sym/=2048;
+
+  // 6. Horizontal edge energy (captures eye/brow/mouth lines)
+  const edges=new Float32Array(8);
+  for(let r=0;r<8;r++){const y=r*8+4;let e=0;for(let x=0;x<64;x++){const diff=Math.abs(gray[y*64+x]-(y>0?gray[(y-1)*64+x]:gray[y*64+x]));e+=diff;}edges[r]=e/64/255;}
+
+  return[...hist,...rows,...cols,...qc,...edges,sym,box.width/Math.max(1,box.height)];
+  // Total: 16+16+16+12+8+1+1 = 70 features
+}
+
+function featureDist(a,b){
+  if(!a||!b||a.length!==b.length)return 999;
+  let s=0;for(let i=0;i<a.length;i++){const d=a[i]-b[i];s+=d*d;}
+  return Math.sqrt(s)*100;
+}
+
+// ── RECOGNITION — matches against ALL enrolled angles ──
+function recognize(features){
+  const enrolled=users.a();if(!enrolled.length)return{match:null,dist:999,conf:0};
+  const maxDist=+$('matchDist').value||50;
+  let best=null,bestDist=999;
+  enrolled.forEach(u=>{
+    // Check all angles (front, left, right)
+    const angles=u.angles||[];
+    if(u.features)angles.push(u.features); // legacy single-angle
+    angles.forEach(feat=>{
+      const d=featureDist(features,feat);
+      if(d<bestDist){bestDist=d;best=u;}
+    });
+  });
+  if(bestDist<=maxDist){
+    return{match:best,dist:bestDist,conf:Math.max(1,Math.min(99,((maxDist-bestDist)/maxDist*100)|0))};
+  }
+  return{match:null,dist:bestDist,conf:0};
+}
+
+// ── DRAW DETECTIONS ──
+function drawResult(faces){
+  octx.clearRect(0,0,ov.width,ov.height);
+  if(!hasNative)drawGuide();
+  const lm=$('liveMatch');lm.innerHTML='';
+  // Zoom indicator
+  const zm=window._camZoom?window._camZoom():1;
+  if(zm>1){
+    octx.font='10px Share Tech Mono,monospace';octx.fillStyle='rgba(0,200,255,.3)';
+    octx.fillText('ZOOM '+zm.toFixed(1)+'x',8,ov.height-8);
+  }
+  // Draw motion region if no faces
+  if(motionRegion&&motionLevel>.02){
+    octx.strokeStyle='rgba(255,176,32,.25)';octx.lineWidth=1;octx.setLineDash([4,4]);
+    octx.strokeRect(motionRegion.x,motionRegion.y,motionRegion.width,motionRegion.height);
+    octx.setLineDash([]);
+    octx.font='9px Share Tech Mono,monospace';octx.fillStyle='rgba(255,176,32,.3)';
+    octx.fillText('MOTION '+(motionLevel*100).toFixed(0)+'%',motionRegion.x,motionRegion.y-4);
+  }
+  if(!faces.length){$('recBg').textContent=motionLevel>.02?'MOTION':'--';return;}
+  $('recBg').textContent=faces.length;
+
+  lastDetectedFaces=faces.map(f=>{const feat=extractFeatures(vid,f);const rec=recognize(feat);return{...f,matched:!!rec.match,label:rec.match?rec.match.name+' '+rec.conf+'%':'?'}});
+  faces.forEach(f=>{
+    const feat=extractFeatures(vid,f);
+    const rec=recognize(feat);
+    const isMatch=!!rec.match;
+    const color=isMatch?'57,255,126':'255,176,32';
+
+    // Box with corners
+    octx.strokeStyle='rgba('+color+',.7)';octx.lineWidth=2;
+    octx.strokeRect(f.x,f.y,f.width,f.height);
+    const cl=Math.min(16,f.width*.12);
+    octx.strokeStyle='rgb('+color+')';octx.lineWidth=3;
+    [[f.x,f.y,cl,0,0,cl],[f.x+f.width,f.y,-cl,0,0,cl],[f.x,f.y+f.height,cl,0,0,-cl],[f.x+f.width,f.y+f.height,-cl,0,0,-cl]].forEach(([x,y,dx,dy,dx2,dy2])=>{
+      octx.beginPath();octx.moveTo(x+dx,y+dy);octx.lineTo(x,y);octx.lineTo(x+dx2,y+dy2);octx.stroke();});
+
+    // Label
+    const label=isMatch?rec.match.name:'UNKNOWN';
+    octx.fillStyle='rgba(0,0,0,.7)';octx.fillRect(f.x,f.y-22,Math.max(f.width,90),20);
+    octx.font='bold 11px Share Tech Mono,monospace';octx.fillStyle='rgb('+color+')';
+    const dist=f.distance?(' ['+f.distance.toUpperCase()+']'):'';
+    const tag=f.zoomed?' ZOOM':f.motion?' MOTION':f.guided?' GUIDE':'';
+    octx.fillText(label+(isMatch?' '+rec.conf+'%':' ?')+dist+tag,f.x+4,f.y-8);
+
+    // Card
+    const card=document.createElement('div');
+    card.style.cssText='display:flex;align-items:center;gap:10px;padding:8px;border:1px solid '+(isMatch?'var(--gn)':'var(--am)')+';margin-bottom:6px';
+    if(isMatch)card.innerHTML='<img src="'+rec.match.thumb+'" style="width:40px;height:40px;object-fit:cover;border:1px solid var(--gn)"><div><div style="color:var(--gn);font-weight:700">'+rec.match.name+'</div><div class="hint" style="margin:0">'+rec.match.role+' '+rec.conf+'%</div></div>';
+    else card.innerHTML='<div style="width:40px;height:40px;border:1px solid var(--am);display:flex;align-items:center;justify-content:center;color:var(--am);font-size:18px">?</div><div style="color:var(--am);font-weight:700">UNKNOWN</div>';
+    lm.appendChild(card);
+    if($('voiceOn').checked&&isMatch)greet(rec.match);
+  });
+}
+
+// ── CAMERA ──
+let camStream=null,looping=false,loopTimer=null,guideTimer=null;
+$('camOn').onclick=async()=>{
+  $('camSt').textContent='Requesting camera...';
+  try{
+    const selCam=$('camSelect').value;
+    const vidConstraints=selCam?{deviceId:{exact:selCam},width:{ideal:640},height:{ideal:480}}:{facingMode:'user',width:{ideal:640},height:{ideal:480}};
+    camStream=await navigator.mediaDevices.getUserMedia({video:vidConstraints});
+    vid.srcObject=camStream;
+    await new Promise((ok,no)=>{vid.onloadedmetadata=ok;setTimeout(()=>no(new Error('Timeout')),10000);});
+    await vid.play();ov.width=vid.videoWidth;ov.height=vid.videoHeight;
+    $('camOn').disabled=true;$('camOff').disabled=false;$('scanOnce').disabled=false;$('scanLoop').disabled=false;$('enrollBtn').disabled=false;$('enrollSkip').disabled=false;$('zoomIn').disabled=false;$('zoomOut').disabled=false;$('streamBtn').disabled=false;
+    $('camBg').textContent='ON';$('camBg').classList.add('ok');
+    $('camSt').textContent='Camera active ('+vid.videoWidth+'x'+vid.videoHeight+') — '+(hasNative?'native':'guided')+' detection';
+    guideActive=true;
+    if(!hasNative)guideTimer=setInterval(()=>{if(!looping){octx.clearRect(0,0,ov.width,ov.height);drawGuide();}},500);
+    // Check for hardware zoom support
+    const track=camStream.getVideoTracks()[0];
+    const caps=track.getCapabilities?track.getCapabilities():{};
+    let curZoom=1;
+    if(caps.zoom){
+      fvLog('Hardware zoom: '+caps.zoom.min+'x-'+caps.zoom.max+'x','system');
+      $('zoomIn').onclick=()=>{curZoom=Math.min(caps.zoom.max,curZoom+.5);track.applyConstraints({advanced:[{zoom:curZoom}]});$('camSt').textContent='Zoom: '+curZoom.toFixed(1)+'x';};
+      $('zoomOut').onclick=()=>{curZoom=Math.max(caps.zoom.min,curZoom-.5);track.applyConstraints({advanced:[{zoom:curZoom}]});$('camSt').textContent='Zoom: '+curZoom.toFixed(1)+'x';};
+    }else{
+      fvLog('No hardware zoom — using digital','system');
+      $('zoomIn').onclick=()=>{curZoom=Math.min(4,curZoom+.5);$('camSt').textContent='Digital zoom: '+curZoom.toFixed(1)+'x';};
+      $('zoomOut').onclick=()=>{curZoom=Math.max(1,curZoom-.5);$('camSt').textContent='Digital zoom: '+curZoom.toFixed(1)+'x';};
+    }
+    window._camZoom=()=>curZoom;
+    window._camHasHWZoom=!!caps.zoom;
+    fvLog('Camera started','system');
+  }catch(e){$('camSt').textContent='Error: '+e.message;}
+};
+$('camOff').onclick=()=>{
+  if(camStream)camStream.getTracks().forEach(t=>t.stop());camStream=null;looping=false;guideActive=false;
+  if(loopTimer)clearInterval(loopTimer);if(guideTimer)clearInterval(guideTimer);
+  $('camOn').disabled=false;$('camOff').disabled=true;$('scanOnce').disabled=true;$('scanLoop').disabled=true;$('enrollBtn').disabled=true;$('enrollSkip').disabled=true;
+  $('scanLoop').textContent='CONTINUOUS';octx.clearRect(0,0,ov.width,ov.height);$('camBg').textContent='OFF';$('camBg').classList.remove('ok');$('zoomIn').disabled=true;$('zoomOut').disabled=true;$('streamBtn').disabled=true;stopStream();
+  resetEnroll();
+};
+
+$('scanOnce').onclick=async()=>{
+  $('camSt').textContent='Scanning...';
+  const faces=await detectWithZoom();drawResult(faces);logDets(faces);
+  $('camSt').textContent=faces.length+' face(s)'+(motionLevel>.01?' | motion '+(motionLevel*100).toFixed(0)+'%':'');
+};
+$('scanLoop').onclick=function(){
+  looping=!looping;
+  if(looping){
+    this.textContent='STOP';this.style.borderColor='var(--gn)';this.style.color='var(--gn)';
+    const iv=+$('scanInt').value||1000;
+    loopTimer=setInterval(async()=>{try{const f=await detectWithZoom();drawResult(f);logDets(f);}catch(e){}},iv);
+  }else{
+    this.textContent='CONTINUOUS';this.style.borderColor='var(--am)';this.style.color='var(--am)';
+    clearInterval(loopTimer);octx.clearRect(0,0,ov.width,ov.height);if(!hasNative)drawGuide();
+  }
+};
+
+let lastLogged={};
+function logDets(faces){
+  faces.forEach(f=>{
+    const feat=extractFeatures(vid,f);const rec=recognize(feat);
+    const key=rec.match?rec.match.id:'unk';const now=Date.now();
+    if(lastLogged[key]&&now-lastLogged[key]<5000)return;lastLogged[key]=now;
+    if(rec.match){
+      matchCount++;localStorage.setItem('fv_mc',String(matchCount));
+      fvLog('Recognized: '+rec.match.name+' ('+rec.conf+'%)','match');
+      const ul=users.a();const u=ul.find(x=>x.id===rec.match.id);
+      if(u){u.lastSeen=new Date().toLocaleString();u.seenCount=(u.seenCount||0)+1;users.s(ul);}
+      visionNotify('vision_recognized',{name:rec.match.name,role:rec.match.role,conf:rec.conf,thumb:rec.match.thumb});
+    }else{
+      unkCount++;localStorage.setItem('fv_uc',String(unkCount));
+      fvLog('Unknown face','unknown');visionNotify('vision_unknown');
+    }
+    updateStats();
+  });
+}
+
+// ── MULTI-ANGLE ENROLLMENT ──
+let enrollState=0; // 0=ready, 1=front captured, 2=left captured, 3=done
+let enrollData={name:'',role:'',access:'',angles:[],thumbs:[]};
+
+function resetEnroll(){
+  enrollState=0;enrollData={name:'',role:'',access:'',angles:[],thumbs:[]};
+  $('enrollBtn').textContent='CAPTURE FRONT';
+  ['es1','es2','es3'].forEach(id=>{$(id).className='step-badge';});
+  $('eSt').textContent='';
+}
+
+function captureAngle(){
+  const faces=hasNative?null:null; // We use detect() async below
+  return new Promise(async(resolve)=>{
+    const faces=await detectWithZoom();
+    if(!faces.length){resolve(null);return;}
+    const f=faces[0];
+    const feat=extractFeatures(vid,f);
+    const tc=document.createElement('canvas');tc.width=96;tc.height=96;
+    // Use zoomed image if available for better thumbnail at distance
+    if(f.zoomThumb){
+      const img=new Image();img.src=f.zoomThumb;
+      tc.getContext('2d').drawImage(vid,f.x,f.y,f.width,f.height,0,0,96,96);
+    }else{
+      tc.getContext('2d').drawImage(vid,f.x,f.y,f.width,f.height,0,0,96,96);
+    }
+    resolve({features:feat,thumb:tc.toDataURL('image/jpeg',.7)});
+  });
+}
+
+$('enrollBtn').onclick=async()=>{
+  const name=$('eName').value.trim(),role=$('eRole').value.trim()||'User',access=$('eAccess').value;
+  if(enrollState===0&&!name){$('eSt').textContent='Enter a name.';return;}
+
+  if(enrollState===0){
+    // Capture FRONT
+    enrollData.name=name;enrollData.role=role;enrollData.access=access;
+    $('eSt').textContent='Hold still — capturing front...';
+    const cap=await captureAngle();
+    if(!cap){$('eSt').textContent='No face detected. Position face and try again.';return;}
+    enrollData.angles.push(cap.features);enrollData.thumbs.push(cap.thumb);
+    enrollState=1;$('es1').classList.add('done');$('es2').classList.add('active');
+    $('enrollBtn').textContent='CAPTURE LEFT';
+    $('eSt').textContent='Front captured. Now turn head LEFT ~45° and capture.';
+    fvLog('Enroll '+name+': front captured','system');
+  }else if(enrollState===1){
+    // Capture LEFT
+    $('eSt').textContent='Capturing left side...';
+    const cap=await captureAngle();
+    if(!cap){$('eSt').textContent='No face detected. Turn left and try again.';return;}
+    enrollData.angles.push(cap.features);enrollData.thumbs.push(cap.thumb);
+    enrollState=2;$('es2').classList.remove('active');$('es2').classList.add('done');$('es3').classList.add('active');
+    $('enrollBtn').textContent='CAPTURE RIGHT';
+    $('eSt').textContent='Left captured. Now turn head RIGHT ~45° and capture.';
+    fvLog('Enroll '+name+': left captured','system');
+  }else if(enrollState===2){
+    // Capture RIGHT
+    $('eSt').textContent='Capturing right side...';
+    const cap=await captureAngle();
+    if(!cap){$('eSt').textContent='No face detected. Turn right and try again.';return;}
+    enrollData.angles.push(cap.features);enrollData.thumbs.push(cap.thumb);
+    $('es3').classList.remove('active');$('es3').classList.add('done');
+    finishEnroll();
+  }
+};
+
+$('enrollSkip').onclick=()=>{
+  if(enrollState>=1)finishEnroll();
+};
+
+function finishEnroll(){
+  const user={
+    id:Date.now().toString(36),
+    name:enrollData.name,role:enrollData.role,access:enrollData.access,
+    angles:enrollData.angles,
+    thumb:enrollData.thumbs[0],
+    thumbs:enrollData.thumbs,
+    enrolled:new Date().toLocaleDateString(),
+    lastSeen:null,seenCount:0,notes:''
+  };
+  const ul=users.a();ul.push(user);users.s(ul);
+  $('eName').value='';$('eRole').value='';
+  $('eSt').textContent='Enrolled: '+user.name+' ('+user.angles.length+' angle'+(user.angles.length>1?'s':'')+')';
+  fvLog('Enrolled: '+user.name+' with '+user.angles.length+' angle(s)','system');
+  drawUsers();updateStats();resetEnroll();
+}
+
+// ── VOICE ──
+let lastGreet={};
+function greet(user){
+  const now=Date.now();if(lastGreet[user.id]&&now-lastGreet[user.id]<30000)return;lastGreet[user.id]=now;
+  const h=new Date().getHours();const tod=h<12?'morning':h<17?'afternoon':'evening';
+  const msgs=['Good '+tod+', '+user.name+'.','Welcome back, '+user.name+'.',user.name+' — access confirmed.'];
+  if(window.speechSynthesis){const u=new SpeechSynthesisUtterance(msgs[Math.random()*3|0]);const v=speechSynthesis.getVoices();const s=$('voiceSel').value;if(s)u.voice=v[+s]||null;u.rate=.95;speechSynthesis.speak(u);}
+}
+function popVoices(){const vs=speechSynthesis.getVoices();if(!vs.length)return;const s=$('voiceSel');s.innerHTML='';vs.filter(v=>v.lang.startsWith('en')).forEach(v=>{const o=document.createElement('option');o.value=vs.indexOf(v);o.textContent=v.name;s.appendChild(o);})}
+if(window.speechSynthesis){speechSynthesis.onvoiceschanged=popVoices;popVoices();}
+
+// ── USERS ──
+function drawUsers(){
+  const ul=users.a(),el=$('uList');el.innerHTML='';
+  if(!ul.length){el.innerHTML='<div class="hint">No users enrolled.</div>';$('uCount').textContent='0';return;}
+  ul.forEach((u,i)=>{
+    const angleCount=u.angles?u.angles.length:(u.features?1:0);
+    const card=document.createElement('div');card.className='user-card';
+    card.innerHTML='<img src="'+u.thumb+'"><div style="flex:1"><div class="nm">'+u.name+'</div><div class="meta">'+u.role+' | '+u.access+' | '+angleCount+' angle(s) | Seen '+(u.seenCount||0)+'x'+(u.lastSeen?' | '+u.lastSeen:'')+'</div></div><button class="btn danger" style="font-size:8px;padding:3px 7px" data-del="'+i+'">DEL</button>';
+    card.onclick=e=>{if(e.target.dataset.del!==undefined)return;showUser(u);};
+    el.appendChild(card);
+  });
+  $('uCount').textContent=ul.length;
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=e=>{e.stopPropagation();const u2=users.a();u2.splice(+b.dataset.del,1);users.s(u2);drawUsers();updateStats();});
+}
+function showUser(u){
+  let thumbsHtml='';
+  (u.thumbs||[u.thumb]).forEach((t,i)=>{thumbsHtml+='<img src="'+t+'" style="width:60px;height:60px;object-fit:cover;border:1px solid var(--cy)">';});
+  $('uDetail').innerHTML='<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">'+thumbsHtml+'</div><div style="font:700 16px var(--mn);color:var(--cy);margin-bottom:4px">'+u.name+'</div><div class="hint" style="margin:0">'+u.role+' | '+u.access+' | '+(u.angles?u.angles.length:1)+' angle(s)</div><div class="hint" style="margin:0">Enrolled: '+u.enrolled+' | Seen: '+(u.seenCount||0)+'x</div><textarea style="min-height:40px;resize:vertical;margin-top:8px" id="uNotes">'+(u.notes||'')+'</textarea><button class="btn" id="uNotesSave" style="margin-top:6px;width:100%">SAVE NOTES</button>';
+  $('uNotesSave').onclick=()=>{const ul=users.a();const f=ul.find(x=>x.id===u.id);if(f){f.notes=$('uNotes').value;users.s(ul);}};
+}
+function updateStats(){$('stTotal').textContent=users.a().length;$('stMatch').textContent=matchCount;$('stUnk').textContent=unkCount;}
+drawUsers();updateStats();
+
+$('clearAll').onclick=()=>{if(!confirm('Delete all?'))return;users.s([]);drawUsers();updateStats();};
+$('clearLog').onclick=()=>{logs.s([]);$('fullLog').innerHTML='';$('recentDet').innerHTML='';};
+$('matchDist').oninput=function(){$('distVal').textContent=this.value;};
+$('exportData').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({users:users.a(),log:logs.a()},null,2)]));a.download='forge-vision.json';a.click();};
+$('importData').onclick=()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=async()=>{try{const d=JSON.parse(await inp.files[0].text());if(d.users)users.s(d.users);drawUsers();updateStats();fvLog('Imported','system');}catch(e){}};inp.click();};
+$('wipeAll').onclick=()=>{if(!confirm('Wipe ALL?'))return;['fv_users','fv_log','fv_mc','fv_uc'].forEach(k=>localStorage.removeItem(k));matchCount=0;unkCount=0;drawUsers();updateStats();$('fullLog').innerHTML='';$('recentDet').innerHTML='';};
+// Supabase config
+$('vSbUrl').value=localStorage.getItem('atlas_sb_url')||'';
+$('vSbKey').value=localStorage.getItem('atlas_sb_key')||'';
+if($('vSbUrl').value)$('vSbSt').textContent='Credentials set.';
+$('vSbSave').onclick=()=>{
+  localStorage.setItem('atlas_sb_url',$('vSbUrl').value.trim());
+  localStorage.setItem('atlas_sb_key',$('vSbKey').value.trim());
+  $('vSbSt').textContent='Saved. Reload page to connect.';
+  fvLog('Supabase credentials saved','system');
+};
+
+logs.a().slice(0,20).forEach(e=>{const el=document.createElement('div');el.className='le';el.innerHTML='<span class="lt">'+e.ts+'</span>'+e.msg;$('fullLog').appendChild(el);});
+
+// ── VIDEO STREAM — frame capture ──
+let streaming=false,streamTimer=null;
+let lastDetectedFaces=[];
+const streamCv=document.createElement('canvas');
+const streamCtx=streamCv.getContext('2d');
+
+function startStream(){
+  if(!camStream||!vid.videoWidth){fvLog('Start camera first','error');return;}
+  streaming=true;
+  $('streamBtn').textContent='STOP';$('streamBtn').style.borderColor='var(--gn)';$('streamBtn').style.color='var(--gn)';
+  fvLog('Streaming at 3fps','system');
+  streamTimer=setInterval(()=>{
+    if(!camStream||!vid.videoWidth)return;
+    const w=200,h=(vid.videoHeight/vid.videoWidth*200)|0||150;
+    streamCv.width=w;streamCv.height=h;
+    streamCtx.drawImage(vid,0,0,w,h);
+    // Burn detection boxes into frame
+    (lastDetectedFaces||[]).forEach(f=>{
+      const sx=w/vid.videoWidth,sy=h/vid.videoHeight;
+      streamCtx.strokeStyle=f.matched?'#39FF7E':'#FFB020';streamCtx.lineWidth=2;
+      streamCtx.strokeRect(f.x*sx,f.y*sy,f.width*sx,f.height*sy);
+      if(f.label){streamCtx.font='bold 8px monospace';streamCtx.fillStyle=f.matched?'#39FF7E':'#FFB020';streamCtx.fillText(f.label,f.x*sx+2,f.y*sy-2);}
+    });
+    const frame=streamCv.toDataURL('image/jpeg',.3);
+    const msg={type:'vision_frame',frame,ts:Date.now(),faces:(lastDetectedFaces||[]).length};
+    // Send on BroadcastChannel (same device)
+    if(forgeLink)try{forgeLink.postMessage(msg)}catch(e){}
+    // Send on Supabase (cross device)
+    if(window._sbStream)try{window._sbStream(msg)}catch(e){}
+  },333); // 3fps
+}
+function stopStream(){
+  streaming=false;if(streamTimer)clearInterval(streamTimer);streamTimer=null;
+  $('streamBtn').textContent='STREAM';$('streamBtn').style.borderColor='var(--mt)';$('streamBtn').style.color='var(--mt)';
+}
+$('streamBtn').onclick=()=>{if(streaming)stopStream();else startStream();};
+
+// ── CAMERA ENUMERATION ──
+async function listCameras(){
+  try{
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    const cams=devices.filter(d=>d.kind==='videoinput');
+    const sel=$('camSelect');
+    sel.innerHTML='<option value="">Select camera ('+cams.length+' found)...</option>';
+    cams.forEach((cam,i)=>{
+      const o=document.createElement('option');
+      o.value=cam.deviceId;
+      o.textContent=cam.label||'Camera '+(i+1);
+      sel.appendChild(o);
+    });
+    fvLog(cams.length+' camera(s) found','system');
+    return cams;
+  }catch(e){fvLog('Camera list error: '+e.message,'error');return[];}
+}
+// Request temp permission to get labels, then list
+navigator.mediaDevices.getUserMedia({video:true}).then(s=>{s.getTracks().forEach(t=>t.stop());listCameras();}).catch(()=>listCameras());
+
+// ── MULTI-CAM DASHBOARD ──
+let dashFeeds=[];
+
+$('dashAdd').onclick=async()=>{
+  const cams=await listCameras();
+  if(!cams.length){fvLog('No cameras found','error');return;}
+  // Pick next unused camera
+  const usedIds=dashFeeds.map(f=>f.deviceId);
+  const available=cams.filter(c=>!usedIds.includes(c.deviceId));
+  const cam=available[0]||cams[0];
+
+  const feedId='feed_'+Date.now();
+  const wrap=document.createElement('div');
+  wrap.id=feedId;
+  wrap.style.cssText='position:relative;background:#000;border:1px solid var(--bd);aspect-ratio:4/3;overflow:hidden';
+  const camLabel=cam.label||'Camera';
+  wrap.innerHTML='<video autoplay playsinline muted style="width:100%;height:100%;object-fit:cover"></video><div style="position:absolute;top:4px;left:6px;font:9px monospace;color:rgba(0,200,255,.4)">'+camLabel+'</div><div style="position:absolute;bottom:4px;left:6px;font:9px monospace;color:rgba(57,255,126,.3)" class="feedStatus">Starting...</div>';
+  const xBtn=document.createElement('button');
+  xBtn.textContent='X';xBtn.style.cssText='position:absolute;top:4px;right:4px;background:rgba(255,64,96,.6);border:none;color:#fff;font:9px monospace;padding:2px 6px;cursor:pointer;z-index:2';
+  xBtn.onclick=function(){removeFeed(feedId)};
+  wrap.appendChild(xBtn);
+
+  // Remove placeholder if present
+  const grid=$('dashGrid');
+  if(grid.children.length===1&&!dashFeeds.length)grid.innerHTML='';
+  grid.appendChild(wrap);
+
+  // Start camera
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:cam.deviceId},width:{ideal:640},height:{ideal:480}}});
+    const vid=wrap.querySelector('video');
+    vid.srcObject=stream;await vid.play();
+    wrap.querySelector('.feedStatus').textContent='Live';
+    dashFeeds.push({id:feedId,deviceId:cam.deviceId,stream,element:wrap});
+    fvLog('Dashboard: added '+(cam.label||'camera'),'system');
+    // Auto-adjust grid columns
+    const count=dashFeeds.length;
+    grid.style.gridTemplateColumns=count<=1?'1fr':count<=4?'1fr 1fr':'1fr 1fr 1fr';
+  }catch(e){
+    wrap.querySelector('.feedStatus').textContent='Error: '+e.message;
+    fvLog('Dashboard camera error: '+e.message,'error');
+  }
+};
+
+window.removeFeed=function(feedId){
+  const idx=dashFeeds.findIndex(f=>f.id===feedId);
+  if(idx>=0){
+    dashFeeds[idx].stream.getTracks().forEach(t=>t.stop());
+    dashFeeds[idx].element.remove();
+    dashFeeds.splice(idx,1);
+    if(!dashFeeds.length)$('dashGrid').innerHTML='<div style="display:flex;align-items:center;justify-content:center;border:1px dashed rgba(0,200,255,.15);aspect-ratio:4/3;color:var(--mt);font:10px var(--mn)">Click + ADD FEED</div>';
+    // Re-adjust grid
+    const count=dashFeeds.length;
+    $('dashGrid').style.gridTemplateColumns=count<=1?'1fr':count<=4?'1fr 1fr':'1fr 1fr 1fr';
+  }
+};
+
+$('dashFull').onclick=()=>{
+  const el=$('dashGrid');
+  if(el.requestFullscreen)el.requestFullscreen();
+  else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
+};
+
+// Update main camera start to use selected camera
+const _origCamOn=$('camOn').onclick;
+
+// ── LINK ──
+let forgeLink=null;
+try{forgeLink=new BroadcastChannel('atlas_forge_link');forgeLink.onmessage=e=>{if(e.data.type==='atlas_ping'||e.data.type==='forge_ping')forgeLink.postMessage({type:'vision_pong'});};}catch(e){}
+function visionNotify(type,data){if(forgeLink)try{forgeLink.postMessage({type,...(data||{})})}catch(e){}}
+
+// Supabase transport for Vision
+(async()=>{
+  const su=localStorage.getItem('atlas_sb_url')||'';
+  const sk=localStorage.getItem('atlas_sb_key')||'';
+  if(!su||!sk)return;
+  try{
+    const sc=document.createElement('script');
+    sc.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+    document.head.appendChild(sc);
+    await new Promise((ok,no)=>{sc.onload=ok;sc.onerror=no;setTimeout(no,8000)});
+    const sb=supabase.createClient(su,sk);
+    const ch=sb.channel('forge-vision-stream',{config:{broadcast:{self:false}}});
+    await ch.subscribe();
+    window._sbVisionSend=(data)=>ch.send({type:'broadcast',event:'frame',payload:data});
+    ch.on('broadcast',{event:'frame'},({payload})=>{if(payload.signal)handleSignal(payload);});
+    ch.on('broadcast',{event:'frame'},({payload})=>{if(payload&&payload.type&&payload.type.startsWith('rtc_'))handleRTCSignal(payload);});
+    fvLog('Supabase stream channel ready','system');
+  }catch(e){fvLog('Supabase stream: '+e.message,'error');}
+})();
+</script></body></html>
