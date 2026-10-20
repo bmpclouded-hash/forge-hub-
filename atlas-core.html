@@ -1,0 +1,654 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Atlas">
+<meta name="theme-color" content="#020408">
+<title>Atlas Core</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0618}
+canvas{display:block;position:fixed;top:0;left:0;width:100%;height:100%}
+#title{position:fixed;top:24px;left:50%;transform:translateX(-50%);font:300 36px/1 'Rajdhani','Share Tech Mono','Courier New',monospace;letter-spacing:.65em;z-index:10;color:rgba(140,120,255,.35);text-shadow:0 0 30px rgba(140,80,255,.2);text-align:center}
+#sub{position:fixed;top:64px;left:50%;transform:translateX(-50%);font:9px/1 'Share Tech Mono',monospace;letter-spacing:.25em;color:rgba(140,120,255,.12);z-index:10}
+#stLbl{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);font:600 11px/1 'Rajdhani','Share Tech Mono',monospace;letter-spacing:.35em;z-index:10;color:rgba(140,120,255,.25);transition:color 1s}
+#link{position:fixed;top:64px;right:20px;font:9px/1 'Share Tech Mono','Courier New',monospace;z-index:10;color:rgba(140,120,255,.1);transition:color .5s}
+.ctrl{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:10;pointer-events:auto;opacity:.25;transition:opacity .3s}
+.ctrl:hover{opacity:.85}
+.cb{background:none;border:1px solid rgba(140,100,255,.08);color:rgba(140,100,255,.3);font:9px/1 'Share Tech Mono','Courier New',monospace;padding:6px 12px;cursor:pointer;letter-spacing:.12em;text-transform:uppercase;transition:.2s}
+.cb:hover{border-color:rgba(140,100,255,.3);color:rgba(140,100,255,.7)}
+.cb.on{border-color:rgba(140,100,255,.6);color:rgba(180,140,255,.9);box-shadow:0 0 10px rgba(140,80,255,.2)}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div id="title" style="cursor:pointer;pointer-events:auto" onclick="var c=document.getElementById('sbCfg');c.style.display=c.style.display==='none'?'block':'none';document.getElementById('sbUrl').value=LSG('atlas_sb_url')||'';document.getElementById('sbKey').value=LSG('atlas_sb_key')||''">ATLAS</div>
+<div id="sub">NEURAL CORE v2.0</div>
+<div id="stLbl">STANDBY</div>
+<div id="link">FORGE: --</div>
+<div id="sbCfg" style="position:fixed;bottom:60px;left:50%;transform:translateX(-50%);display:none;z-index:20;pointer-events:auto;background:rgba(0,0,0,.9);border:1px solid rgba(0,180,255,.15);padding:14px;width:320px;font:10px/1.6 'Share Tech Mono',monospace;color:rgba(0,180,255,.5)">
+  <div style="margin-bottom:8px;color:rgba(0,180,255,.35)">CROSS-DEVICE LINK (Supabase)</div>
+  <input id="sbUrl" placeholder="Supabase project URL" style="background:rgba(0,180,255,.04);border:1px solid rgba(0,180,255,.1);color:#D0E8F0;font:10px 'Share Tech Mono',monospace;padding:6px;width:100%;margin-bottom:5px;outline:none">
+  <input id="sbKey" placeholder="Supabase anon key" style="background:rgba(0,180,255,.04);border:1px solid rgba(0,180,255,.1);color:#D0E8F0;font:10px 'Share Tech Mono',monospace;padding:6px;width:100%;margin-bottom:8px;outline:none">
+  <div style="display:flex;gap:6px">
+    <button class="cb" onclick="LSS('atlas_sb_url',document.getElementById('sbUrl').value.trim());LSS('atlas_sb_key',document.getElementById('sbKey').value.trim());location.reload()" style="flex:1">SAVE + CONNECT</button>
+    <button class="cb" onclick="document.getElementById('sbCfg').style.display='none'" style="flex:1">CLOSE</button>
+  </div>
+</div>
+<button class="cb" id="mClose" style="position:fixed;top:20px;right:20px;z-index:12;display:none;pointer-events:auto">✕ CLOSE MODEL</button>
+<div class="ctrl">
+  <button class="cb" id="bMic">MIC</button>
+  <button class="cb" id="bListen">LISTEN</button>
+  <button class="cb" id="bThink">THINK</button>
+  <button class="cb" id="bTask">TASK</button>
+  <button class="cb" id="bWarn">WARN</button>
+  <button class="cb" id="bTalk">TALK</button>
+</div>
+<script>window.LSG=function(k){try{return LSG(k)}catch(e){return null}};window.LSS=function(k,v){try{LSS(k,v)}catch(e){}};</script>
+<script>
+'use strict';
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let W,H;
+function resize(){const d=Math.min(devicePixelRatio,2);W=cv.width=innerWidth*d;H=cv.height=innerHeight*d;ctx.setTransform(d,0,0,d,0,0)}
+resize();addEventListener('resize',resize);
+
+// ── SIMPLEX NOISE (compact 3D) ──
+const G3=1/6,F3=1/3;
+const grad3=[[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
+const perm=new Uint8Array(512);
+{const p=[];for(let i=0;i<256;i++)p[i]=i;for(let i=255;i>0;i--){const j=Math.random()*(i+1)|0;[p[i],p[j]]=[p[j],p[i]]}for(let i=0;i<512;i++)perm[i]=p[i&255]}
+function noise3(x,y,z){
+  const s=(x+y+z)*F3;const i=Math.floor(x+s),j=Math.floor(y+s),k=Math.floor(z+s);
+  const t=(i+j+k)*G3;const X0=x-(i-t),Y0=y-(j-t),Z0=z-(k-t);
+  let i1,j1,k1,i2,j2,k2;
+  if(X0>=Y0){if(Y0>=Z0){i1=1;j1=0;k1=0;i2=1;j2=1;k2=0}else if(X0>=Z0){i1=1;j1=0;k1=0;i2=1;j2=0;k2=1}else{i1=0;j1=0;k1=1;i2=1;j2=0;k2=1}}
+  else{if(Y0<Z0){i1=0;j1=0;k1=1;i2=0;j2=1;k2=1}else if(X0<Z0){i1=0;j1=1;k1=0;i2=0;j2=1;k2=1}else{i1=0;j1=1;k1=0;i2=1;j2=1;k2=0}}
+  const x1=X0-i1+G3,y1=Y0-j1+G3,z1=Z0-k1+G3;
+  const x2=X0-i2+2*G3,y2=Y0-j2+2*G3,z2=Z0-k2+2*G3;
+  const x3=X0-1+3*G3,y3=Y0-1+3*G3,z3=Z0-1+3*G3;
+  const ii=i&255,jj=j&255,kk=k&255;
+  let n=0;
+  const c=(gi,xn,yn,zn)=>{let t2=.6-xn*xn-yn*yn-zn*zn;if(t2<0)return;t2*=t2;const g=grad3[gi%12];n+=t2*t2*(g[0]*xn+g[1]*yn+g[2]*zn)};
+  c(perm[ii+perm[jj+perm[kk]]],X0,Y0,Z0);
+  c(perm[ii+i1+perm[jj+j1+perm[kk+k1]]],x1,y1,z1);
+  c(perm[ii+i2+perm[jj+j2+perm[kk+k2]]],x2,y2,z2);
+  c(perm[ii+1+perm[jj+1+perm[kk+1]]],x3,y3,z3);
+  return 32*n;
+}
+
+// ── FORGE LINK — dual: BroadcastChannel (same device) + Supabase Realtime (cross-device) ──
+let forgeState='disconnected';
+const linkEl=document.getElementById('link');
+
+function handleEvent(d){
+  if(d.type==='forge_ping'||d.type==='forge_pong'||d.type==='atlas_pong'){
+    forgeState='connected';linkEl.textContent='FORGE: LINKED';linkEl.style.color='rgba(57,255,126,.3)';
+  }
+  if(d.type==='motion_transfer_model'){modelReceive(d.model);return}
+  if(d.type==='forge_think')setState('thinking');
+  if(d.type==='forge_speak'){setState('talking');setTimeout(()=>setState('standby'),4000)}
+  if(d.type==='forge_done'){setState('task');setTimeout(()=>setState('standby'),3000)}
+  if(d.type==='forge_error'){setState('warning');setTimeout(()=>setState('standby'),3000)}
+  if(d.type==='vision_recognized'){setState('task');setTimeout(()=>setState('standby'),3000)}
+  if(d.type==='vision_unknown'){setState('warning');setTimeout(()=>setState('standby'),2500)}
+}
+
+// Transport 1: BroadcastChannel (instant, same device)
+let bcLink=null;
+try{
+  bcLink=new BroadcastChannel('atlas_forge_link');
+  bcLink.onmessage=e=>handleEvent(e.data);
+  setInterval(()=>{if(bcLink)bcLink.postMessage({type:'atlas_ping',state})},5000);
+}catch(e){}
+
+// Transport 2: Supabase Realtime (cross-device)
+let sbChannel=null;
+async function initSupabaseLink(){
+  const sbUrl=LSG('atlas_sb_url')||'';
+  const sbKey=LSG('atlas_sb_key')||'';
+  if(!sbUrl||!sbKey)return;
+  try{
+    const sc=document.createElement('script');
+    sc.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+    document.head.appendChild(sc);
+    await new Promise((ok,no)=>{sc.onload=ok;sc.onerror=no;setTimeout(no,8000)});
+    const sb=supabase.createClient(sbUrl,sbKey);
+    sbChannel=sb.channel('forge-link',{config:{broadcast:{self:false}}});
+    sbChannel.on('broadcast',{event:'sync'},({payload})=>handleEvent(payload));
+    await sbChannel.subscribe();
+    linkEl.textContent='FORGE: CLOUD';linkEl.style.color='rgba(57,255,126,.3)';
+    forgeState='cloud';
+    setInterval(()=>{if(sbChannel)sbChannel.send({type:'broadcast',event:'sync',payload:{type:'atlas_ping',state}})},6000);
+  }catch(e){linkEl.textContent='FORGE: CLOUD ERR'}
+}
+initSupabaseLink();
+
+// ── STATES ──
+const ST={
+  standby:{top:[60,120,255],bot:[200,50,255],rate:.2,label:'STANDBY'},
+  listening:{top:[80,180,255],bot:[220,80,255],rate:.6,label:'LISTENING'},
+  thinking:{top:[140,60,255],bot:[255,40,200],rate:1.2,label:'PROCESSING'},
+  task:{top:[40,220,140],bot:[60,255,180],rate:.35,label:'COMPLETE'},
+  warning:{top:[255,60,40],bot:[255,100,30],rate:1.5,label:'ALERT'},
+  talking:{top:[60,160,255],bot:[180,60,255],rate:.5,label:'SPEAKING'},
+};
+let state='standby',stateT=0;
+let tTop=[60,120,255],tBot=[200,50,255];
+let cTop=[...tTop],cBot=[...tBot],pRate=.2;
+function setState(s){if(!ST[s]||s===state)return;state=s;stateT=0;const st=ST[s];tTop=[...st.top];tBot=[...st.bot];pRate=st.rate;document.getElementById('stLbl').textContent=st.label}
+document.getElementById('bMic').onclick=()=>micToggle();
+document.getElementById('bListen').onclick=()=>setState('listening');
+document.getElementById('bThink').onclick=()=>setState('thinking');
+document.getElementById('bTask').onclick=()=>{setState('task');setTimeout(()=>setState('standby'),3500)};
+document.getElementById('bWarn').onclick=()=>{setState('warning');setTimeout(()=>setState('standby'),3500)};
+document.getElementById('bTalk').onclick=()=>{setState('talking');setTimeout(()=>setState('standby'),5000)};
+
+// ── AUDIO ──
+let actx,analyser,micStream,micOn=false;
+let fq=new Uint8Array(128),vol=0,bass=0;
+function micToggle(){
+  if(micOn){micOn=false;if(micStream)micStream.getTracks().forEach(t=>t.stop());document.getElementById('bMic').classList.remove('on');setState('standby');return}
+  navigator.mediaDevices.getUserMedia({audio:true}).then(s=>{
+    micStream=s;micOn=true;actx=actx||new(AudioContext||webkitAudioContext)();
+    analyser=actx.createAnalyser();analyser.fftSize=256;analyser.smoothingTimeConstant=.82;
+    actx.createMediaStreamSource(s).connect(analyser);fq=new Uint8Array(analyser.frequencyBinCount);
+    document.getElementById('bMic').classList.add('on');setState('listening');
+  }).catch(()=>{});
+}
+function audioTick(){
+  if(!analyser||!micOn){vol*=.92;bass*=.92;return}
+  analyser.getByteFrequencyData(fq);
+  let s=0,b=0;const th=fq.length/3|0;
+  for(let i=0;i<fq.length;i++)s+=fq[i];
+  for(let i=0;i<th;i++)b+=fq[i];
+  vol+=(s/fq.length/255-vol)*.14;
+  bass+=(b/th/255-bass)*.1;
+}
+
+// ── SPHERE MESH ──
+const LATS=40,LONS=50,BASE_R=160;
+function buildVerts(time,noiseAmt){
+  const verts=[];
+  for(let i=0;i<=LATS;i++){
+    const row=[];
+    const lat=Math.PI*i/LATS-Math.PI/2;
+    for(let j=0;j<=LONS;j++){
+      const lon=2*Math.PI*j/LONS;
+      const x=Math.cos(lat)*Math.cos(lon);
+      const y=Math.sin(lat);
+      const z=Math.cos(lat)*Math.sin(lon);
+      // Noise displacement
+      const n=noise3(x*1.8+time*.15,y*1.8+time*.1,z*1.8+time*.12);
+      const disp=1+n*noiseAmt;
+      row.push([x*BASE_R*disp,y*BASE_R*disp,z*BASE_R*disp]);
+    }
+    verts.push(row);
+  }
+  return verts;
+}
+
+// ── SCATTERED PARTICLES ──
+const pts=[];
+for(let i=0;i<300;i++){
+  const a=Math.random()*6.28,p=Math.acos(2*Math.random()-1);
+  pts.push({a,p,r:BASE_R*(1.1+Math.random()*.6),sp:.001+Math.random()*.003,sz:.5+Math.random()*2,al:.1+Math.random()*.4,ph:Math.random()*6.28,dr:Math.random()*.002});
+}
+
+// ══════════════ MODEL VIEWER ══════════════
+// FORGE's Design Bay "Send to ATLAS" (from a hand gesture or the menu) arrives as motion_transfer_model.
+// The model shows up on a holographic wall panel, flies to the centre, and can be spun with a drag / zoomed with the wheel.
+// Everything received over the link is untrusted: shapes are allow-listed, numbers clamped, colours validated, sizes capped, and
+// nothing is ever put in the DOM as HTML (text goes through canvas fillText only).
+function mBox(w,h,d){
+  const x=w/2,y=h/2,z=d/2;
+  const v=[[-x,-y,-z],[x,-y,-z],[x,y,-z],[-x,y,-z],[-x,-y,z],[x,-y,z],[x,y,z],[-x,y,z]];
+  return[[0,1,2],[0,2,3],[5,4,7],[5,7,6],[4,0,3],[4,3,7],[1,5,6],[1,6,2],[3,2,6],[3,6,7],[4,5,1],[4,1,0]].map(f=>f.map(i=>v[i]));
+}
+function mCyl(r,h,s=24){
+  const T=[],t=h/2,b=-h/2;
+  for(let i=0;i<s;i++){
+    const a1=i/s*6.2832,a2=(i+1)/s*6.2832;
+    const x1=Math.cos(a1)*r,z1=Math.sin(a1)*r,x2=Math.cos(a2)*r,z2=Math.sin(a2)*r;
+    T.push([[x1,b,z1],[x2,b,z2],[x2,t,z2]],[[x1,b,z1],[x2,t,z2],[x1,t,z1]],
+           [[0,t,0],[x1,t,z1],[x2,t,z2]],[[0,b,0],[x2,b,z2],[x1,b,z1]]);
+  }return T;
+}
+function mCone(r,h,s=24){
+  const T=[],t=h/2,b=-h/2;
+  for(let i=0;i<s;i++){
+    const a1=i/s*6.2832,a2=(i+1)/s*6.2832;
+    T.push([[Math.cos(a1)*r,b,Math.sin(a1)*r],[Math.cos(a2)*r,b,Math.sin(a2)*r],[0,t,0]],
+           [[0,b,0],[Math.cos(a2)*r,b,Math.sin(a2)*r],[Math.cos(a1)*r,b,Math.sin(a1)*r]]);
+  }return T;
+}
+function mSph(r,s=16){
+  const T=[];
+  for(let i=0;i<s;i++){
+    const p1=i/s*Math.PI,p2=(i+1)/s*Math.PI;
+    for(let j=0;j<s*2;j++){
+      const t1=j/(s*2)*6.2832,t2=(j+1)/(s*2)*6.2832;
+      const P=(p,t)=>[r*Math.sin(p)*Math.cos(t),r*Math.cos(p),r*Math.sin(p)*Math.sin(t)];
+      T.push([P(p1,t1),P(p1,t2),P(p2,t2)],[P(p1,t1),P(p2,t2),P(p2,t1)]);
+    }
+  }return T;
+}
+function mTor(R,r,s=20,u=12){
+  const T=[];
+  for(let i=0;i<s;i++){
+    const u1=i/s*6.2832,u2=(i+1)/s*6.2832;
+    for(let j=0;j<u;j++){
+      const v1=j/u*6.2832,v2=(j+1)/u*6.2832;
+      const P=(a,b)=>[(R+r*Math.cos(b))*Math.cos(a),r*Math.sin(b),(R+r*Math.cos(b))*Math.sin(a)];
+      T.push([P(u1,v1),P(u2,v1),P(u2,v2)],[P(u1,v1),P(u2,v2),P(u1,v2)]);
+    }
+  }return T;
+}
+// Pyramid — square base, point on top
+function mPyr(w,h){
+  const x=w/2,t=h/2,b=-h/2;
+  const v=[[-x,b,-x],[x,b,-x],[x,b,x],[-x,b,x],[0,t,0]];
+  return[[0,1,4],[1,2,4],[2,3,4],[3,0,4],[0,2,1],[0,3,2]].map(f=>f.map(i=>v[i]));
+}
+// Wedge/ramp — box cut diagonally
+function mWedge(w,h,d){
+  const x=w/2,y=h/2,z=d/2;
+  const v=[[-x,-y,-z],[x,-y,-z],[x,-y,z],[-x,-y,z],[-x,y,-z],[x,y,-z]];
+  return[[0,1,5],[0,5,4],[0,3,2],[0,2,1],[4,5,1],[4,1,2],[4,2,3],[0,4,3],[2,5,1]].map(f=>f.map(i=>v[i]));
+}
+// Hexagonal prism
+function mHex(r,h){
+  const T=[],t=h/2,b=-h/2;
+  for(let i=0;i<6;i++){
+    const a1=i/6*6.2832,a2=(i+1)/6*6.2832;
+    const x1=Math.cos(a1)*r,z1=Math.sin(a1)*r,x2=Math.cos(a2)*r,z2=Math.sin(a2)*r;
+    T.push([[x1,b,z1],[x2,b,z2],[x2,t,z2]],[[x1,b,z1],[x2,t,z2],[x1,t,z1]],
+           [[0,t,0],[x1,t,z1],[x2,t,z2]],[[0,b,0],[x2,b,z2],[x1,b,z1]]);
+  }return T;
+}
+// Disc — flat cylinder (ring if d>0)
+function mDisc(r,h,inner){
+  const T=[],t=h/2,b=-h/2,ri=inner||0,s=24;
+  for(let i=0;i<s;i++){
+    const a1=i/s*6.2832,a2=(i+1)/s*6.2832;
+    const x1=Math.cos(a1),z1=Math.sin(a1),x2=Math.cos(a2),z2=Math.sin(a2);
+    // Outer wall
+    T.push([[x1*r,b,z1*r],[x2*r,b,z2*r],[x2*r,t,z2*r]],[[x1*r,b,z1*r],[x2*r,t,z2*r],[x1*r,t,z1*r]]);
+    if(ri>0){
+      // Inner wall
+      T.push([[x2*ri,b,z2*ri],[x1*ri,b,z1*ri],[x1*ri,t,z1*ri]],[[x2*ri,b,z2*ri],[x1*ri,t,z1*ri],[x2*ri,t,z2*ri]]);
+      // Top ring
+      T.push([[x1*ri,t,z1*ri],[x1*r,t,z1*r],[x2*r,t,z2*r]],[[x1*ri,t,z1*ri],[x2*r,t,z2*r],[x2*ri,t,z2*ri]]);
+      // Bottom ring
+      T.push([[x1*r,b,z1*r],[x1*ri,b,z1*ri],[x2*ri,b,z2*ri]],[[x1*r,b,z1*r],[x2*ri,b,z2*ri],[x2*r,b,z2*r]]);
+    }else{
+      T.push([[0,t,0],[x1*r,t,z1*r],[x2*r,t,z2*r]],[[0,b,0],[x2*r,b,z2*r],[x1*r,b,z1*r]]);
+    }
+  }return T;
+}
+// Capsule — cylinder with hemisphere caps
+function mCap(r,h,s){
+  s=s||16;const T=[],bh=Math.max(0,h/2-r);
+  // Cylinder body
+  for(let i=0;i<s;i++){
+    const a1=i/s*6.2832,a2=(i+1)/s*6.2832;
+    const x1=Math.cos(a1)*r,z1=Math.sin(a1)*r,x2=Math.cos(a2)*r,z2=Math.sin(a2)*r;
+    T.push([[x1,-bh,z1],[x2,-bh,z2],[x2,bh,z2]],[[x1,-bh,z1],[x2,bh,z2],[x1,bh,z1]]);
+  }
+  // Hemisphere caps
+  const hs=s/2|0;
+  for(let i=0;i<hs;i++){
+    const p1=i/hs*(Math.PI/2),p2=(i+1)/hs*(Math.PI/2);
+    for(let j=0;j<s;j++){
+      const t1=j/s*6.2832,t2=(j+1)/s*6.2832;
+      const P=(p,t,flip)=>[r*Math.sin(p)*Math.cos(t),(flip?-1:1)*(bh+r*Math.cos(p)),r*Math.sin(p)*Math.sin(t)];
+      T.push([P(p1,t1,0),P(p1,t2,0),P(p2,t2,0)],[P(p1,t1,0),P(p2,t2,0),P(p2,t1,0)]);
+      T.push([P(p1,t2,1),P(p1,t1,1),P(p2,t1,1)],[P(p2,t1,1),P(p2,t2,1),P(p1,t2,1)]);
+    }
+  }return T;
+}
+// L-bracket — two boxes joined at right angle
+function mLBracket(w,h,d,t2){
+  const th=t2||w*.2;
+  return[...mBox(w,th,d).map(f=>f.map(v=>[v[0],v[1]-h/2+th/2,v[2]])),...mBox(th,h,d).map(f=>f.map(v=>[v[0]-w/2+th/2,v[1],v[2]]))];
+}
+
+function partMesh(p){
+  const w=p.w||1,h=p.h||1,d=p.d||1;
+  let T;
+  switch(p.shape){
+    case 'sphere':T=mSph(w/2);break;
+    case 'cylinder':T=mCyl(w/2,h);break;
+    case 'cone':T=mCone(w/2,h);break;
+    case 'torus':T=mTor(w/2,Math.max(.05,(d||.25)/2));break;
+    case 'pyramid':T=mPyr(w,h);break;
+    case 'wedge':T=mWedge(w,h,d);break;
+    case 'hex':T=mHex(w/2,h);break;
+    case 'disc':T=mDisc(w/2,h||.15,0);break;
+    case 'ring':T=mDisc(w/2,h||.15,(w/2)*.6);break;
+    case 'capsule':T=mCap(w/2,h);break;
+    case 'bracket':T=mLBracket(w,h,d);break;
+    default:T=mBox(w,h,d);
+  }
+  const ox=p.x||0,oy=p.y||0,oz=p.z||0;
+  // Apply rotation if specified (degrees -> radians)
+  const rx=(p.rx||0)*Math.PI/180,ry=(p.ry||0)*Math.PI/180,rz=(p.rz||0)*Math.PI/180;
+  if(rx||ry||rz){
+    const rotX=(v)=>{const c=Math.cos(rx),s=Math.sin(rx);return[v[0],v[1]*c-v[2]*s,v[1]*s+v[2]*c];};
+    const rotY=(v)=>{const c=Math.cos(ry),s=Math.sin(ry);return[v[0]*c+v[2]*s,v[1],-v[0]*s+v[2]*c];};
+    const rotZ=(v)=>{const c=Math.cos(rz),s=Math.sin(rz);return[v[0]*c-v[1]*s,v[0]*s+v[1]*c,v[2]];};
+    T=T.map(t=>t.map(v=>rotZ(rotY(rotX(v)))));
+  }
+  return T.map(t=>t.map(v=>[v[0]+ox,v[1]+oy,v[2]+oz]));
+}
+
+
+const M_SHAPES=['box','sphere','cylinder','cone','torus','pyramid','wedge','hex','disc','ring','capsule','bracket'];
+const M_MAX_PARTS=60,M_MAX_TRIS=24000;
+function mNum(v,lo,hi,d){v=+v;return Number.isFinite(v)?Math.min(hi,Math.max(lo,v)):d}
+function mColor(c){return typeof c==='string'&&/^#[0-9a-fA-F]{6}$/.test(c)?c:'#00C8FF'}
+function mText(s,n){return String(s==null?'':s).replace(/[\u0000-\u001f\u007f<>]/g,'').slice(0,n)}
+function modelSanitize(m){
+  if(!m||typeof m!=='object'||!Array.isArray(m.parts))return null;
+  const parts=[];
+  for(const p of m.parts){
+    if(parts.length>=M_MAX_PARTS)break;
+    if(!p||typeof p!=='object')continue;
+    const sp=(p.spec&&typeof p.spec==='object')?p.spec:p;
+    const shape=M_SHAPES.includes(sp.shape)?sp.shape:(M_SHAPES.includes(p.shape)?p.shape:null);
+    if(!shape)continue;
+    parts.push({name:mText(p.name,40)||'part',selected:p.selected===true,
+      color:mColor(p.color||sp.color),
+      spec:{shape,x:mNum(sp.x,-200,200,0),y:mNum(sp.y,-200,200,0),z:mNum(sp.z,-200,200,0),
+        w:mNum(sp.w,0.01,200,1),h:mNum(sp.h,0.01,200,1),d:mNum(sp.d,0.01,200,1),
+        rx:mNum(sp.rx,-3600,3600,0),ry:mNum(sp.ry,-3600,3600,0),rz:mNum(sp.rz,-3600,3600,0)}});
+  }
+  if(!parts.length)return null;
+  return{label:mText(m.label,60)||'MODEL',parts};
+}
+// Triangles → wireframe edges. Edges between (nearly) coplanar triangles are dropped, so flat faces don't show their triangulation.
+function modelEdges(tris){
+  const map=new Map(),q=v=>Math.round(v*1000);
+  const key=(a,b)=>{const ka=q(a[0])+','+q(a[1])+','+q(a[2]),kb=q(b[0])+','+q(b[1])+','+q(b[2]);return ka<kb?ka+'|'+kb:kb+'|'+ka};
+  for(const t of tris){
+    const ux=t[1][0]-t[0][0],uy=t[1][1]-t[0][1],uz=t[1][2]-t[0][2],vx=t[2][0]-t[0][0],vy=t[2][1]-t[0][1],vz=t[2][2]-t[0][2];
+    let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;const l=Math.hypot(nx,ny,nz);
+    if(l>1e-12){nx/=l;ny/=l;nz/=l}else{nx=ny=nz=0}
+    for(let k=0;k<3;k++){
+      const A=t[k],B=t[(k+1)%3],kk=key(A,B),en=map.get(kk);
+      if(en)en.n.push([nx,ny,nz]);else map.set(kk,{a:A,b:B,n:[[nx,ny,nz]]});
+    }
+  }
+  const out=[];
+  map.forEach(en=>{
+    if(en.n.length>=2){const p=en.n[0],r=en.n[1];if(p[0]*r[0]+p[1]*r[1]+p[2]*r[2]>0.9995)return}
+    out.push(en.a[0],en.a[1],en.a[2],en.b[0],en.b[1],en.b[2]);
+  });
+  return new Float32Array(out);
+}
+let model=null,mPos=0,mYaw=.6,mPitch=.35,mZoom=1,mDrag=null,mAuto=true;
+function modelReceive(raw){
+  const m=modelSanitize(raw);
+  if(!m)return;
+  let tris=0;const parts=[];
+  for(const p of m.parts){
+    let T;try{T=partMesh(p.spec)}catch(e){continue}
+    tris+=T.length;if(tris>M_MAX_TRIS)break;
+    parts.push({name:p.name,color:p.color,selected:p.selected,edges:modelEdges(T)});
+  }
+  if(!parts.length)return;
+  // centre + radius of the whole model so any size fits
+  let mnx=1e9,mny=1e9,mnz=1e9,mxx=-1e9,mxy=-1e9,mxz=-1e9;
+  parts.forEach(p=>{const e=p.edges;for(let i=0;i<e.length;i+=3){mnx=Math.min(mnx,e[i]);mxx=Math.max(mxx,e[i]);mny=Math.min(mny,e[i+1]);mxy=Math.max(mxy,e[i+1]);mnz=Math.min(mnz,e[i+2]);mxz=Math.max(mxz,e[i+2])}});
+  const c=[(mnx+mxx)/2,(mny+mxy)/2,(mnz+mxz)/2];let R=1e-6;
+  parts.forEach(p=>{const e=p.edges;for(let i=0;i<e.length;i+=3)R=Math.max(R,Math.hypot(e[i]-c[0],e[i+1]-c[1],e[i+2]-c[2]))});
+  model={label:m.label,parts,c,R,age:0,leaving:false,leaveT:0};
+  mZoom=1;mYaw=.6;mPitch=.35;mAuto=true;
+  document.getElementById('mClose').style.display='block';
+  setState('task');setTimeout(()=>setState('standby'),3000);
+  const ack={type:'atlas_model_ack',parts:parts.length,label:m.label};
+  try{if(bcLink)bcLink.postMessage(ack)}catch(e){}
+  try{if(sbChannel)sbChannel.send({type:'broadcast',event:'sync',payload:ack})}catch(e){}
+}
+function modelDismiss(){if(model&&!model.leaving){model.leaving=true;model.leaveT=0}}
+const mEase=x=>x<0?0:x>1?1:x*x*(3-2*x);
+let mLastT=0;
+function modelStep(){
+  const now=performance.now(),dt=Math.min(.1,Math.max(0,(now-(mLastT||now))/1000));mLastT=now;   // real time, so slow frame rates don't slow the animation
+  if(!model){mPos=0;return}
+  if(model.leaving){
+    model.leaveT+=dt;mPos=1-mEase(model.leaveT/1.2);model.wallA=Math.max(0,1-Math.max(0,model.leaveT-1.2)/.5);
+    if(model.leaveT>1.7){model=null;mPos=0;document.getElementById('mClose').style.display='none'}
+    return;
+  }
+  model.age+=dt;model.wallA=Math.min(1,model.age/.5);
+  mPos=mEase((model.age-.9)/1.4);                       // 0 = on the wall, 1 = centred
+  if(mAuto&&!mDrag)mYaw+=dt*.35;
+}
+function modelDraw(w,h){
+  if(!model)return;
+  const cx=w/2,cy=h/2,wallX=w-Math.min(190,w*.2),wallY=cy;
+  const full=Math.min(w,h)*.3*mZoom,small=Math.min(w,h)*.085;
+  const p=mPos,x0=wallX+(cx-wallX)*p,y0=wallY+(cy-wallY)*p,sc=small+(full-small)*p;
+  // wall panel (fades as the model leaves it)
+  const wa=(model.wallA==null?1:model.wallA)*(1-p);
+  if(wa>.01){
+    const pw=small*3.1,ph=small*3.6;
+    ctx.save();ctx.globalAlpha=wa;
+    ctx.fillStyle='rgba(20,10,50,.35)';ctx.fillRect(wallX-pw/2,wallY-ph/2,pw,ph);
+    ctx.strokeStyle='rgba(120,160,255,.35)';ctx.lineWidth=1;ctx.strokeRect(wallX-pw/2,wallY-ph/2,pw,ph);
+    ctx.strokeStyle='rgba(140,200,255,.9)';ctx.lineWidth=2;const L=14,x1=wallX-pw/2,y1=wallY-ph/2,x2=wallX+pw/2,y2=wallY+ph/2;
+    [[x1,y1,1,1],[x2,y1,-1,1],[x1,y2,1,-1],[x2,y2,-1,-1]].forEach(([x,y,sx,sy])=>{ctx.beginPath();ctx.moveTo(x,y+sy*L);ctx.lineTo(x,y);ctx.lineTo(x+sx*L,y);ctx.stroke()});
+    ctx.fillStyle='rgba(140,200,255,.8)';ctx.font="10px 'Share Tech Mono',monospace";ctx.textAlign='center';
+    ctx.fillText('INCOMING MODEL',wallX,y1-8);ctx.fillText(model.parts.length+' PARTS',wallX,y2+16);
+    const sy=((model.age*.6)%1)*ph;ctx.fillStyle='rgba(120,200,255,.12)';ctx.fillRect(x1,y1+sy,pw,2);    // scan line
+    ctx.restore();
+  }
+  // model
+  const cy2=Math.cos(mYaw),sy2=Math.sin(mYaw),cp=Math.cos(mPitch),sp=Math.sin(mPitch);
+  const alpha=Math.min(1,model.age/.6)*(model.leaving?Math.max(0,1-Math.max(0,model.leaveT-1.2)/.5):1);
+  ctx.save();ctx.lineCap='round';
+  model.parts.forEach(pt=>{
+    const e=pt.edges;
+    ctx.beginPath();
+    for(let i=0;i<e.length;i+=6){
+      let ax=(e[i]-model.c[0])/model.R,ay=(e[i+1]-model.c[1])/model.R,az=(e[i+2]-model.c[2])/model.R;
+      let bx=(e[i+3]-model.c[0])/model.R,by=(e[i+4]-model.c[1])/model.R,bz=(e[i+5]-model.c[2])/model.R;
+      let t1=ax*cy2+az*sy2;az=-ax*sy2+az*cy2;ax=t1;t1=ay*cp-az*sp;az=ay*sp+az*cp;ay=t1;
+      t1=bx*cy2+bz*sy2;bz=-bx*sy2+bz*cy2;bx=t1;t1=by*cp-bz*sp;bz=by*sp+bz*cp;by=t1;
+      const fa=3/(3+az),fb=3/(3+bz);
+      ctx.moveTo(x0+ax*sc*fa,y0-ay*sc*fa);ctx.lineTo(x0+bx*sc*fb,y0-by*sc*fb);
+    }
+    ctx.strokeStyle=pt.selected?'rgba(255,176,32,'+(.95*alpha)+')':hexA(pt.color,.75*alpha);
+    ctx.lineWidth=pt.selected?1.8:.9;ctx.stroke();
+  });
+  ctx.restore();
+  // caption once centred
+  if(p>.95&&!model.leaving){
+    ctx.save();ctx.textAlign='center';ctx.fillStyle='rgba(180,160,255,.8)';ctx.font="600 14px 'Rajdhani','Share Tech Mono',monospace";
+    ctx.fillText(model.label.toUpperCase(),cx,h-120);
+    const sel=model.parts.find(q=>q.selected);
+    ctx.font="10px 'Share Tech Mono',monospace";ctx.fillStyle='rgba(140,160,255,.55)';
+    ctx.fillText(model.parts.length+' PARTS'+(sel?'  ·  SELECTED: '+sel.name.toUpperCase():'')+'  ·  DRAG TO ROTATE  ·  SCROLL TO ZOOM',cx,h-102);
+    ctx.restore();
+  }
+}
+function hexA(hex,a){const n=parseInt(hex.slice(1),16);return'rgba('+(n>>16&255)+','+(n>>8&255)+','+(n&255)+','+a+')'}
+document.getElementById('mClose').onclick=modelDismiss;
+cv.addEventListener('pointerdown',e=>{if(model&&mPos>.9){mDrag={x:e.clientX,y:e.clientY};mAuto=false;try{cv.setPointerCapture(e.pointerId)}catch(_){}}});
+cv.addEventListener('pointermove',e=>{if(!mDrag)return;mYaw+=(e.clientX-mDrag.x)*.01;mPitch=Math.max(-1.4,Math.min(1.4,mPitch+(e.clientY-mDrag.y)*.01));mDrag={x:e.clientX,y:e.clientY}});
+cv.addEventListener('pointerup',()=>{mDrag=null});cv.addEventListener('pointercancel',()=>{mDrag=null});
+cv.addEventListener('wheel',e=>{if(model){e.preventDefault();mZoom=Math.max(.5,Math.min(2.5,mZoom*(e.deltaY>0?.92:1.08)))}},{passive:false});
+cv.addEventListener('dblclick',()=>{if(model)modelDismiss()});
+addEventListener('keydown',e=>{if(e.key==='Escape')modelDismiss()});
+
+// ── RENDER ──
+let t=0;
+const L3=(a,b,f)=>[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f];
+
+function frame(){
+  requestAnimationFrame(frame);
+  t+=.016;stateT+=.016;
+  audioTick();
+  const w=innerWidth,h=innerHeight,cx=w/2,cy=h/2;
+  cTop=L3(cTop,tTop,.03);cBot=L3(cBot,tBot,.03);
+  const pulse=Math.sin(t*pRate*6.28)*.5+.5;
+  const noiseAmt=.18+vol*.4+pulse*.05+bass*.15;
+
+  // Background gradient
+  const bg=ctx.createRadialGradient(cx,cy*.85,0,cx,cy,w*.6);
+  bg.addColorStop(0,'#120a2a');bg.addColorStop(.5,'#0a0618');bg.addColorStop(1,'#050310');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
+  modelStep();
+  ctx.save();                                           // while a model is showing, the orb shrinks to a status light in the corner
+  if(mPos>0){const e=mPos,k=1-.8*e;ctx.translate(cx+(Math.min(90,w*.1)-cx)*e,cy+(Math.min(110,h*.14)-cy)*e);ctx.scale(k,k);ctx.translate(-cx,-cy)}
+
+  // Camera rotation
+  const rotY=t*.25;
+  const rotX=.35+Math.sin(t*.15)*.1;
+  const cosY=Math.cos(rotY),sinY=Math.sin(rotY);
+  const cosX=Math.cos(rotX),sinX=Math.sin(rotX);
+
+  // Build displaced vertices
+  const verts=buildVerts(t,noiseAmt);
+
+  // Project function
+  const fov=500;
+  const camZ=400;
+  function proj(v){
+    let x=v[0],y=v[1],z=v[2];
+    // Rotate Y
+    const tx=x*cosY-z*sinY;const tz=x*sinY+z*cosY;x=tx;z=tz;
+    // Rotate X
+    const ty=y*cosX-z*sinX;const tz2=y*sinX+z*cosX;y=ty;z=tz2;
+    const d=camZ+z;
+    if(d<10)return null;
+    return{x:cx+x*fov/d,y:cy+y*fov/d,z,d,oy:v[1]};
+  }
+
+  // Project all vertices
+  const pv=verts.map(row=>row.map(v=>proj(v)));
+
+  // ── GLOW behind sphere ──
+  const glow=ctx.createRadialGradient(cx,cy,BASE_R*.3,cx,cy,BASE_R*1.5);
+  glow.addColorStop(0,`rgba(${cBot.map(v=>v*.4|0).join(',')},${.06+vol*.04+pulse*.02})`);
+  glow.addColorStop(.5,`rgba(${cBot.map(v=>v*.2|0).join(',')},${.02})`);
+  glow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=glow;ctx.beginPath();ctx.arc(cx,cy,BASE_R*1.5,0,6.28);ctx.fill();
+
+  // Bottom glow (magenta hotspot)
+  const botGlow=ctx.createRadialGradient(cx,cy+BASE_R*.6,0,cx,cy+BASE_R*.6,BASE_R);
+  botGlow.addColorStop(0,`rgba(${cBot.map(v=>v|0).join(',')},${.06+vol*.03})`);
+  botGlow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=botGlow;ctx.beginPath();ctx.arc(cx,cy+BASE_R*.6,BASE_R,0,6.28);ctx.fill();
+
+  // ── DRAW WIREFRAME ──
+  // Latitude lines
+  for(let i=0;i<=LATS;i++){
+    ctx.beginPath();
+    let started=false;
+    for(let j=0;j<=LONS;j++){
+      const p=pv[i][j];
+      if(!p)continue;
+      // Color: gradient from blue (top) to magenta (bottom)
+      const yNorm=(p.oy/BASE_R+1)/2; // 0=bottom, 1=top
+      const r=(cTop[0]*yNorm+cBot[0]*(1-yNorm))|0;
+      const g=(cTop[1]*yNorm+cBot[1]*(1-yNorm))|0;
+      const b=(cTop[2]*yNorm+cBot[2]*(1-yNorm))|0;
+      // Depth fade
+      const depthAlpha=Math.max(0,Math.min(1,(p.z+BASE_R*1.5)/(BASE_R*3)));
+      const alpha=(.15+depthAlpha*.45+vol*.15+pulse*.05);
+      ctx.strokeStyle=`rgba(${r},${g},${b},${alpha})`;
+      ctx.lineWidth=.4+depthAlpha*.8;
+      if(!started){ctx.moveTo(p.x,p.y);started=true}
+      else ctx.lineTo(p.x,p.y);
+    }
+    ctx.stroke();
+  }
+  // Longitude lines
+  for(let j=0;j<=LONS;j++){
+    ctx.beginPath();
+    let started=false;
+    for(let i=0;i<=LATS;i++){
+      const p=pv[i][j];
+      if(!p)continue;
+      const yNorm=(p.oy/BASE_R+1)/2;
+      const r=(cTop[0]*yNorm+cBot[0]*(1-yNorm))|0;
+      const g=(cTop[1]*yNorm+cBot[1]*(1-yNorm))|0;
+      const b=(cTop[2]*yNorm+cBot[2]*(1-yNorm))|0;
+      const depthAlpha=Math.max(0,Math.min(1,(p.z+BASE_R*1.5)/(BASE_R*3)));
+      const alpha=(.12+depthAlpha*.4+vol*.12+pulse*.04);
+      ctx.strokeStyle=`rgba(${r},${g},${b},${alpha})`;
+      ctx.lineWidth=.3+depthAlpha*.6;
+      if(!started){ctx.moveTo(p.x,p.y);started=true}
+      else ctx.lineTo(p.x,p.y);
+    }
+    ctx.stroke();
+  }
+
+  // ── VERTEX DOTS (bright at intersections) ──
+  for(let i=0;i<=LATS;i+=2){
+    for(let j=0;j<=LONS;j+=2){
+      const p=pv[i][j];
+      if(!p)continue;
+      const depthAlpha=Math.max(0,Math.min(1,(p.z+BASE_R*1.5)/(BASE_R*3)));
+      if(depthAlpha<.2)continue;
+      const yNorm=(p.oy/BASE_R+1)/2;
+      const r=(cTop[0]*yNorm+cBot[0]*(1-yNorm))|0;
+      const g=(cTop[1]*yNorm+cBot[1]*(1-yNorm))|0;
+      const b=(cTop[2]*yNorm+cBot[2]*(1-yNorm))|0;
+      const sz=.8+depthAlpha*1.2+vol;
+      ctx.fillStyle=`rgba(${Math.min(255,r+60)},${Math.min(255,g+60)},${Math.min(255,b+60)},${depthAlpha*.5+vol*.2})`;
+      ctx.beginPath();ctx.arc(p.x,p.y,sz,0,6.28);ctx.fill();
+    }
+  }
+
+  // ── SCATTERED PARTICLES ──
+  pts.forEach(p=>{
+    p.a+=p.sp*(1+vol*2);p.p+=p.dr;
+    const r=p.r+Math.sin(t+p.ph)*15+vol*30;
+    let x=Math.cos(p.a)*Math.sin(p.p)*r;
+    let y=Math.cos(p.p)*r;
+    let z=Math.sin(p.a)*Math.sin(p.p)*r;
+    const tx=x*cosY-z*sinY;z=x*sinY+z*cosY;x=tx;
+    const ty=y*cosX-z*sinX;z=y*sinX+z*cosX;y=ty;
+    const d=camZ+z;if(d<10)return;
+    const sx=cx+x*fov/d,sy=cy+y*fov/d;
+    const depthAlpha=Math.max(0,(z+BASE_R*2)/(BASE_R*4));
+    const yNorm=Math.max(0,Math.min(1,(p.p/Math.PI)));
+    const pr=(cTop[0]*yNorm+cBot[0]*(1-yNorm))|0;
+    const pg=(cTop[1]*yNorm+cBot[1]*(1-yNorm))|0;
+    const pb=(cTop[2]*yNorm+cBot[2]*(1-yNorm))|0;
+    ctx.fillStyle=`rgba(${pr},${pg},${pb},${p.al*depthAlpha*(.3+vol*.3)})`;
+    ctx.beginPath();ctx.arc(sx,sy,p.sz*(depthAlpha+.3),0,6.28);ctx.fill();
+  });
+
+  // ── STATE EFFECTS ──
+  if(state==='thinking'){
+    for(let i=0;i<3;i++){
+      const sa=t*(1+i*.3)+i*2.09;const sr=BASE_R*1.3;
+      ctx.strokeStyle=`rgba(${cBot.map(v=>v|0).join(',')},${(.03+pulse*.02)/(i+1)})`;
+      ctx.lineWidth=.5;ctx.beginPath();
+      ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(sa)*sr,cy+Math.sin(sa)*sr*.6);ctx.stroke();
+    }
+  }
+  if(state==='talking'){
+    ctx.strokeStyle=`rgba(${cTop.map(v=>v|0).join(',')},${.08+vol*.15})`;ctx.lineWidth=1;
+    ctx.beginPath();
+    for(let i=0;i<=60;i++){const a=i/60*6.28;
+      const amp=micOn?(fq[i%fq.length]/255*20):(Math.sin(t*7+i*.5)*5*pulse);
+      ctx[i?'lineTo':'moveTo'](cx+Math.cos(a)*(BASE_R+30+amp),cy+Math.sin(a)*(BASE_R+30+amp)*.55);}
+    ctx.closePath();ctx.stroke();
+  }
+  if(state==='warning'){
+    const wa=Math.sin(t*8)*.5+.5;
+    if(wa>.3){ctx.strokeStyle=`rgba(255,50,30,${wa*.12})`;ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(cx,cy,BASE_R*1.2+wa*8,0,6.28);ctx.stroke();}
+  }
+  if(state==='task'){
+    for(let i=0;i<6;i++){const st2=(stateT*1.5+i*.45)%3.5;if(st2>2.5)continue;
+      ctx.fillStyle=`rgba(${cTop.map(v=>v|0).join(',')},${(1-st2/2.5)*.35})`;
+      ctx.beginPath();ctx.arc(cx+Math.sin(i*1.5+t)*30,cy-st2*50,1.5+(1-st2/2.5)*2,0,6.28);ctx.fill();}
+  }
+  ctx.restore();
+  modelDraw(w,h);
+}
+requestAnimationFrame(frame);
+</script></body></html>
